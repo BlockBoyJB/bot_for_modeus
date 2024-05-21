@@ -1,0 +1,83 @@
+version: "3"
+
+services:
+  bot:
+    container_name: bot
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./logs:/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+    networks:
+      - bot
+
+  postgres:
+    container_name: bot-postgres
+    image: postgres:15
+    healthcheck:
+      test: pg_isready -d ${PG_DB} -U ${PG_USER}
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASS}
+      POSTGRES_DB: ${PG_DB}
+    networks:
+      - bot
+
+  broker:
+    container_name: bot-broker
+    image: rabbitmq:3.12.8-management
+    healthcheck:
+      test: rabbitmq-diagnostics -q status && rabbitmq-diagnostics -q check_local_alarms
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - bot
+
+  #  selenium:
+  #    container_name: bot-selenium
+  #    image: selenium/standalone-chrome:latest
+  #    shm_size: "4g"
+  #    ports:
+  #      - "4444:4444"
+  #    volumes:
+  #      - /dev/shm:/dev/shm
+  #    networks:
+  #      - bot
+
+  selenium:
+    container_name: bot-selenium
+    image: selenium/hub:latest
+    ports:
+      - "4443:4443"
+      - "4444:4444"
+      - "4442:4442"
+    networks:
+      - bot
+
+  chrome:
+    image: selenium/node-chrome:latest
+    shm_size: 2gb
+    depends_on:
+      - selenium
+    environment:
+      - SE_EVENT_BUS_HOST=selenium
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_INSTANCES=10
+      - SE_NODE_MAX_SESSIONS=10
+      - SE_NODE_SESSION_TIMEOUT=10
+    networks:
+      - bot
+
+networks:
+  bot:
+    driver: bridge
