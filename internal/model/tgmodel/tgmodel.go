@@ -1,42 +1,40 @@
 package tgmodel
 
-import "fmt"
-
-type Message struct {
-	UserId     int64
-	MessageId  int
-	Text       string
-	IsCallback bool
-	IsCommand  bool
-}
-
-type (
-	InlineButton struct {
-		Key   string
-		Value string
-	}
-	RowInlineButtons []InlineButton
+import (
+	"fmt"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-var SettingsButtons = []RowInlineButtons{
-	{InlineButton{Key: "Добавить логин и пароль", Value: "/add_login_password"}, InlineButton{Key: "Изменить ФИО", Value: "/update_full_name"}},
-	//{InlineButton{Key: "Добавить регулярное оповещение", Value: "/add_notification"}}, // может когда нибудь сделаю
-	{InlineButton{Key: "Удалить логин и пароль", Value: "/delete_login_password"}},
+var SettingsButtons = [][]tgbotapi.InlineKeyboardButton{
+	{tgbotapi.NewInlineKeyboardButtonData("Добавить логин и пароль", "/add_login_password"), tgbotapi.NewInlineKeyboardButtonData("Изменить ФИО", "/update_full_name")},
 }
 
-var YesOrNoButtons = []RowInlineButtons{
-	{InlineButton{Key: "Да", Value: "да"}, InlineButton{Key: "Нет", Value: "нет"}},
+var YesOrNoButtons = [][]tgbotapi.InlineKeyboardButton{
+	{tgbotapi.NewInlineKeyboardButtonData("Да", "да")},
+	{tgbotapi.NewInlineKeyboardButtonData("Нет", "нет")},
 }
 
-var OtherStudentButtons = []RowInlineButtons{
-	{InlineButton{Key: "Расписание на сегодня", Value: "day_schedule"}, InlineButton{Key: "Расписание на неделю", Value: "week_schedule"}},
+var ChooseFriendsAction = [][]tgbotapi.InlineKeyboardButton{
+	{tgbotapi.NewInlineKeyboardButtonData("Расписание на день", "day_schedule")},
+	{tgbotapi.NewInlineKeyboardButtonData("Расписание на неделю", "week_schedule")},
+	{tgbotapi.NewInlineKeyboardButtonData("Удалить друга", "delete_friend")},
 }
 
-func NumbersButtons(k, size int) []RowInlineButtons {
+var OtherStudentButtons = [][]tgbotapi.InlineKeyboardButton{
+	{tgbotapi.NewInlineKeyboardButtonData("Расписание на день", "day_schedule")},
+	{tgbotapi.NewInlineKeyboardButtonData("Расписание на неделю", "week_schedule")},
+}
+
+var MyProfileButtons = [][]tgbotapi.InlineKeyboardButton{
+	{tgbotapi.NewInlineKeyboardButtonData("Обо мне", "/about_me")},
+	{tgbotapi.NewInlineKeyboardButtonData("Рейтинги", "/ratings")},
+}
+
+func NumbersButtons(k, size int) [][]tgbotapi.InlineKeyboardButton {
 	// Идею реализации подсмотрел у aiogram KeyboardBuilder.adjust
 	// https://docs.aiogram.dev/en/latest/utils/keyboard.html#aiogram.utils.keyboard.ReplyKeyboardBuilder.adjust
-	var buttons []RowInlineButtons
-	var row RowInlineButtons
+	var buttons [][]tgbotapi.InlineKeyboardButton
+	var row []tgbotapi.InlineKeyboardButton
 	var num string
 	for i := 1; i <= k; i++ {
 		if len(row) >= size {
@@ -44,7 +42,7 @@ func NumbersButtons(k, size int) []RowInlineButtons {
 			row = nil
 		}
 		num = fmt.Sprintf("%d", i)
-		row = append(row, InlineButton{Key: num, Value: num})
+		row = append(row, tgbotapi.NewInlineKeyboardButtonData(num, num))
 	}
 	if len(row) != 0 {
 		buttons = append(buttons, row)
@@ -52,46 +50,32 @@ func NumbersButtons(k, size int) []RowInlineButtons {
 	return buttons
 }
 
-type UIBotCommand struct {
-	Command     string
-	Description string
+func FriendsButtons(friends map[string]string, size int) [][]tgbotapi.InlineKeyboardButton {
+	// friends: ключ - personId (SubjectId), значение - ФИО
+	buttons := [][]tgbotapi.InlineKeyboardButton{{tgbotapi.NewInlineKeyboardButtonData("Добавить друга", "/add_friend")}}
+	var row []tgbotapi.InlineKeyboardButton
+	for personId, fullName := range friends {
+		if len(row) >= size {
+			buttons = append(buttons, row)
+			row = nil
+		}
+		row = append(row, tgbotapi.NewInlineKeyboardButtonData(fullName, personId))
+	}
+	if len(row) != 0 {
+		buttons = append(buttons, row)
+	}
+	return buttons
 }
 
-var UICommands = []UIBotCommand{
-	{
-		Command:     "start",
-		Description: "Перезапустить бота",
-	},
-	{
-		Command:     "help",
-		Description: "Помощь",
-	},
-	{
-		Command:     "menu",
-		Description: "Главное меню",
-	},
-	{
-		Command:     "settings",
-		Description: "Настройки",
-	},
-	{
-		Command:     "day_schedule",
-		Description: "Расписание на день",
-	},
-	{
-		Command:     "week_schedule",
-		Description: "Расписание на неделю",
-	},
-	{
-		Command:     "grades",
-		Description: "Посмотреть баллы",
-	},
-	{
-		Command:     "other_student",
-		Description: "Расписание другого студента",
-	},
-	{
-		Command:     "stop",
-		Description: "Остановить бота",
-	},
+var UICommands = []tgbotapi.BotCommand{
+	{Command: "start", Description: "Перезапустить бота"},
+	{Command: "help", Description: "Помощь"},
+	{Command: "day_schedule", Description: "Расписание на день"},
+	{Command: "week_schedule", Description: "Расписание на неделю"},
+	{Command: "grades", Description: "Посмотреть баллы"},
+	{Command: "friends", Description: "Посмотреть расписание друзей"},
+	{Command: "me", Description: "Информация обо мне"},
+	{Command: "settings", Description: "Настройки"},
+	{Command: "other_student", Description: "Расписание другого студента"},
+	{Command: "stop", Description: "Остановить бота"},
 }

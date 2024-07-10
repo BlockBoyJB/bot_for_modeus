@@ -7,35 +7,43 @@ import (
 
 type Config struct {
 	Bot      Bot
-	PG       PG
+	MongoDB  MongoDB
+	Redis    Redis
 	Log      Log
 	Selenium Selenium
-	Broker   Broker
 	Root     Root
+	Crypter  Crypter
 }
 
 type (
 	Bot struct {
-		Token string `env:"BOT_TOKEN"`
+		Token     string `env-required:"true" env:"BOT_TOKEN"`
+		IsWebhook bool   `env-required:"true" env:"BOT_WEBHOOK"`
 	}
-	PG struct {
-		MaxPoolSize int    `env:"PG_MAX_POOL_SIZE"`
-		Url         string `env:"PG_URL"`
+	MongoDB struct {
+		Url        string `env-required:"true" env:"MONGO_URL"`
+		DB         string `env-required:"true" env:"MONGO_DB"`
+		Collection string `env-required:"true" env:"MONGO_COLLECTION"`
+	}
+	Redis struct {
+		Url         string `env-required:"true" env:"REDIS_URL"`
+		MaxPoolSize int    `env-required:"true" env:"REDIS_MAX_POOL_SIZE"`
 	}
 	Log struct {
-		Level  string `env:"LOG_LEVEL"`
-		Output string `env:"LOG_OUTPUT"`
+		Level  string `env-required:"true" env:"LOG_LEVEL"`
+		Output string `env-required:"true" env:"LOG_OUTPUT"`
 	}
 	Selenium struct {
-		Url      string `env:"SELENIUM_URL"`
-		LocalUrl string `env:"LOCAL_CLIENT"`
+		Url        string `env-required:"true" env:"SELENIUM_URL"`
+		LocalPath  string `env-required:"true" env:"SELENIUM_LOCAL"`
+		ClientMode string `env-required:"true" env:"SELENIUM_MODE"`
 	}
 	Root struct {
-		Login    string `env:"MAIN_USER"`
-		Password string `env:"MAIN_PASS"`
+		Login    string `env-required:"true" env:"MAIN_USER"`
+		Password string `env-required:"true" env:"MAIN_PASS"`
 	}
-	Broker struct {
-		Url string `env:"BROKER_URL"`
+	Crypter struct {
+		Secret string `env-required:"true" env:"SECRET"`
 	}
 )
 

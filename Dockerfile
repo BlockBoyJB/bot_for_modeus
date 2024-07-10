@@ -9,13 +9,11 @@ COPY --from=modules /go/pkg /go/pkg
 COPY . /app  
 WORKDIR /app  
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -tags migrate -o /bin/app ./cmd/bot  
+    go build -o /bin/app ./cmd/bot
   
   
-FROM alpine:latest  
-COPY --from=builder /app/docker.env .env  
-COPY --from=builder /app/config /config  
-COPY --from=builder /app/migrations /migrations  
+FROM alpine:latest
+COPY --from=builder /app/config /config
 COPY --from=builder /bin/app /app  
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/  
 CMD ["/app"]

@@ -2,12 +2,15 @@ package bot
 
 import (
 	"bot_for_modeus/config"
+	v2 "bot_for_modeus/internal/handler/v2"
+	"bot_for_modeus/internal/model/tgmodel"
 	"bot_for_modeus/internal/repo"
 	"bot_for_modeus/internal/service"
-	"bot_for_modeus/internal/tg/client"
-	"bot_for_modeus/internal/tg/handler"
-	"bot_for_modeus/pkg/parser"
-	"bot_for_modeus/pkg/postgres"
+	"bot_for_modeus/pkg/bot"
+	"bot_for_modeus/pkg/crypter"
+	"bot_for_modeus/pkg/modeus"
+	"bot_for_modeus/pkg/mongo"
+	"bot_for_modeus/pkg/redis"
 	"context"
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
@@ -25,66 +28,62 @@ func Run() {
 	setLogger(cfg.Log.Level, cfg.Log.Output)
 
 	// Initializing database
-	log.Info("Initializing database...")
-	pg, err := postgres.New(cfg.PG.Url)
+	mongodb, err := mongo.NewMongo(ctx, cfg.MongoDB.Url, cfg.MongoDB.DB, cfg.MongoDB.Collection)
 	if err != nil {
 		log.Fatalf("database init error: %s", err)
 	}
-	defer pg.Close()
+	defer mongodb.Disconnect()
 
-	// Initializing broker
-	//log.Info("Initializing broker...")
-	//rmq, err := rabbitmq.New(cfg.Broker.Url)
-	//if err != nil {
-	//	log.Fatalf("broker init error: %s", err)
-	//}
-	//defer rmq.Close()
-
-	//rmqBroker := broker.NewBroker(rmq)
-
-	// Local selenium client
-	log.Info("Initializing local selenium client...")
-	selenium, err := parser.NewLocalClient(cfg.Selenium.LocalUrl)
-	defer selenium.CloseLocalClient()
+	// selenium for modeus parser
+	selenium, err := modeus.NewSeleniumFromConfig(cfg.Selenium.ClientMode, cfg.Selenium.Url, cfg.Selenium.LocalPath)
 	if err != nil {
-		log.Fatalf("parser local init error: %s", err)
+		log.Fatalf("selenium init error: %s", err)
 	}
+	defer selenium.CloseClient()
+
+	// redis database
+	rdb := redis.NewRedis(cfg.Redis.Url, redis.MaxPoolSize(cfg.Redis.MaxPoolSize))
+	defer rdb.Close()
 
 	d := service.ServicesDependencies{
-		Repos: repo.NewRepositories(pg),
-		//Parser: parser.NewClient(cfg.Selenium.Url), // remote client
-		Parser: selenium, // local selenium client
-		//Rabbit:    rmqBroker,
+		Repos:     repo.NewRepositories(mongodb),
+		Parser:    modeus.NewModeus(selenium),
+		Redis:     rdb,
+		Crypter:   crypter.NewPasswordCrypter(cfg.Crypter.Secret),
 		RootLogin: cfg.Root.Login,
 		RootPass:  cfg.Root.Password,
 	}
 	services := service.NewServices(d)
 
-	// Инициализируем хэндлер в явном виде, чтобы была возможность оборачивать его в мидлвари
-	clientHandler := client.ProcessingMessage
-
-	// Initializing tg client
-	log.Info("Initializing tg client...")
-	tgClient, err := client.NewClient(cfg.Bot.Token, clientHandler)
+	s := bot.Settings{
+		Token:     cfg.Bot.Token,
+		IsWebhook: cfg.Bot.IsWebhook,
+		Redis:     rdb.Client,
+		Ctx:       ctx,
+	}
+	// tg client
+	b, err := bot.NewBot(s, bot.SetCommands(tgmodel.UICommands))
 	if err != nil {
 		log.Fatalf("tg client init error: %s", err)
 	}
+	v2.NewRouter(b, services)
+	go b.ListenAndServe()
 
-	h := handler.NewHandler(ctx, tgClient, services) // incoming message handler
-	go tgClient.ListenAndServe(h)                    // start listening updates
-
-	//go rmqBroker.Consumer.StartConsume(h) // start consumer for broker messages
 	log.Info("all services are running!")
 
-	// TODO добавлю graceful shutdown в будущем, пока просто заглушка
 	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
 	<-interrupt
+
+	b.Shutdown()
+	log.Infof("Bot shutdown with exit code 0")
 }
 
 // loading environment params from .env
 func init() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("load env file error: %s", err)
+	if _, ok := os.LookupEnv("BOT_TOKEN"); !ok {
+		if err := godotenv.Load(); err != nil {
+			log.Fatalf("load env file error: %s", err)
+		}
 	}
 }
