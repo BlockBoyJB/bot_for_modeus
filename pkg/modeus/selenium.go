@@ -13,7 +13,7 @@ const (
 	loginPasswordPlaceholder = "//input[@id='passwordInput']"
 	loginButtonPlaceholder   = "//span[@class='submit']"
 	incorrectInputData       = "//span[@id='errorText']"
-	defaultRedirectTimeout   = time.Second * 7 // Пользователь может ввести некорректный пароль в бота, поэтому будет беда, потому что будет не редирект, а сообщение с ошибкой о неправильном пароле
+	defaultRedirectTimeout   = time.Second * 10 // Пользователь может ввести некорректный пароль в бота, поэтому будет беда, потому что будет не редирект, а сообщение с ошибкой о неправильном пароле
 )
 
 type Selenium struct {
@@ -103,7 +103,7 @@ func (s *Selenium) ExtractToken(login, password string, timeout time.Duration) (
 		return false, nil
 	}, timeout)
 	if err != nil {
-		return "", ErrFindElementTimeout
+		return "", err
 	}
 	email, err := driver.FindElement(selenium.ByXPATH, loginEmailPlaceholder)
 	if err != nil {
@@ -126,15 +126,19 @@ func (s *Selenium) ExtractToken(login, password string, timeout time.Duration) (
 	if err = btn.Click(); err != nil {
 		return "", err
 	}
+	// После заполнения формы и нажатия на кнопку мы ждем, пока нас редиректнет на страницу модеуса.
+	// Тут нужно повесить ожидание, потому что это делается не мгновенно
+	// К тому же, если пароль/логин неверные, то редирект не произойдет
 	err = driver.WaitWithTimeout(func(wd selenium.WebDriver) (bool, error) {
-		url, err := driver.CurrentURL()
-		if err != nil {
-			return false, err
+		url, e := driver.CurrentURL()
+		if e != nil {
+			return false, e
 		}
 		return strings.Contains(url, defaultModeusUrl), nil
 	}, defaultRedirectTimeout)
 	if err != nil {
-		// это может быть не только ошибка пользователя, а какие-то внешние проблемы
+		// это может быть не только ошибка пользователя, а какие-то внешние проблемы,
+		// поэтому проверяем поле, которое отображается после неправильного ввода
 		errField, e := driver.FindElement(selenium.ByXPATH, incorrectInputData)
 		if e != nil {
 			return "", e
@@ -143,6 +147,7 @@ func (s *Selenium) ExtractToken(login, password string, timeout time.Duration) (
 		if e != nil {
 			return "", e
 		}
+		// Если надпись появилась, значит это точно ошибка пользователя
 		if text != "" {
 			return "", ErrIncorrectInputData
 		}
@@ -157,6 +162,9 @@ func (s *Selenium) ExtractToken(login, password string, timeout time.Duration) (
 		}
 		return result != nil, nil
 	}, timeout)
+	if err != nil {
+		return "", err
+	}
 	token, ok := result.(string)
 	if !ok {
 		return "", errors.New("cannot extract token")

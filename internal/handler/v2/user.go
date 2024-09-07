@@ -7,103 +7,95 @@ import (
 	"bot_for_modeus/pkg/bot"
 	"errors"
 	"fmt"
-	"strconv"
 )
-
-const (
-	currentLesson        = "Предмет: %s\nПара: %s\nТип занятия: %s\nВремя: %s\nАудитория: %s\nАдрес: %s\nПреподаватель: %s"
-	currentSubjectGrades = "Предмет: %s\nТекущий результат: %s\nИтог модуля: %s\nПроцент Посещения: %s\nПроцент Пропуска: %s\nПроцент Не отмечено: %s"
-)
-
-var dates = map[int]string{
-	1: "Понедельник",
-	2: "Вторник",
-	3: "Среда",
-	4: "Четверг",
-	5: "Пятница",
-	6: "Суббота",
-	7: "Воскресенье",
-}
 
 type userRouter struct {
 	user   service.User
 	parser parser.Parser
 }
 
-func newUserRouter(cmd, cb, state *bot.Group, user service.User, parser parser.Parser) {
-	r := userRouter{
+func newUserRouter(b *bot.Bot, user service.User, parser parser.Parser) {
+	r := &userRouter{
 		user:   user,
 		parser: parser,
 	}
 
-	cmd.AddRoute("/start", r.cmdStart)
-	cmd.AddRoute("/stop", r.cmdStop)
-	cmd.AddRoute("/day_schedule", r.cmdDaySchedule)
-	cmd.AddRoute("/week_schedule", r.cmdWeekSchedule)
-	cmd.AddRoute("/grades", r.cmdGrades)
-	cmd.AddRoute("/help", r.cmdHelp)
-	state.AddRoute(stateActionAfterCreate, r.stateActionAfterCreate)
-	state.AddRoute(stateInputFullName, r.stateInputFullName)
-	state.AddRoute(stateChooseUser, r.stateChooseUser)
-	state.AddRoute(stateDeleteUser, r.stateDeleteUser)
-	cmd.AddRoute("/me", r.cmdMe)
-	cb.AddRoute("/about_me", r.callbackAboutMe)
-	cb.AddRoute("/ratings", r.callbackRatings)
+	b.Command("/start", r.cmdStart)
+	b.Callback("/cmd_start_back", r.callbackStartBack)
+	b.State(stateInputFullName, r.stateInputFullName)
+	b.State(stateChooseStudent, r.stateChooseStudent)
+	b.State(stateActionAfterCreate, r.stateActionAfterCreate)
+	b.Command("/stop", r.cmdStop)
+	b.State(stateConfirmDelete, r.stateConfirmDelete)
+	b.Command("/me", r.cmdMe)
+	b.Callback("/me_back", r.callbackMeBack)
+	b.Callback("/about_me", r.callbackAboutMe)
+	b.Callback("/ratings", r.callbackRatings)
 }
 
 func (r *userRouter) cmdStart(c bot.Context) error {
+	_ = c.Clear()
 	if err := c.SetState(stateInputFullName); err != nil {
 		return err
 	}
 	return c.SendMessage(txtStart)
 }
 
+func (r *userRouter) callbackStartBack(c bot.Context) error {
+	if err := c.EditMessage("Пожалуйста, введите Ваше ФИО как указано в системе модеус"); err != nil {
+		return err
+	}
+	return c.SetState(stateInputFullName)
+}
+
 func (r *userRouter) stateInputFullName(c bot.Context) error {
-	users, err := r.parser.FindAllUsers(c.Context(), c.Text())
+	// тут находим всех пользователей с введенным фио
+	students, err := r.parser.FindStudents(c.Context(), c.Text())
 	if err != nil {
 		if errors.Is(err, parser.ErrStudentsNotFound) {
 			return c.SendMessage(fmt.Sprintf(txtStudentNotFound, c.Text()))
 		}
 		return err
 	}
-	if err = c.UpdateData("users", users); err != nil {
+	if err = c.SetData("students", students); err != nil {
 		return err
 	}
-	text, kb := formatStudents(users)
+	text, kb := formatStudents(students)
+	// кнопка назад для того, чтобы заново ввести ФИО
+	kb = append(kb, tgmodel.BackButton("/cmd_start_back")...)
 	if err = c.SendMessageWithInlineKB(text, kb); err != nil {
 		return err
 	}
-	return c.SetState(stateChooseUser)
+	return c.SetState(stateChooseStudent)
 }
 
-func (r *userRouter) stateChooseUser(c bot.Context) error {
-	var users []parser.ModeusUser
-	if err := c.GetData("users", &users); err != nil {
-		return err
-	}
-	num, err := strconv.Atoi(c.Text())
+func (r *userRouter) stateChooseStudent(c bot.Context) error {
+	s, err := findStudent(c)
 	if err != nil {
-		return err
-	}
-	user := users[num-1]
-	input := service.UserInput{
-		UserId:     c.UserId(),
-		FullName:   user.FullName,
-		ScheduleId: user.ScheduleId,
-		GradesId:   user.GradesId,
-	}
-	if err = r.user.CreateUser(c.Context(), input); err != nil {
-		if errors.Is(err, service.ErrUserAlreadyExists) {
-			if err = r.user.UpdateUserInformation(c.Context(), input); err != nil {
-				if errors.Is(err, service.ErrUserNotFound) { // это вообще реально???
-					return c.SendMessage(txtUserNotFound)
-				}
-			}
-			return c.SendMessage("Информация о пользователе успешно обновлена!\n" + txtDefault)
+		if errors.Is(err, ErrIncorrectInput) {
+			return c.SendMessage(txtWarn)
 		}
 		return err
 	}
-	if err = c.SendMessageWithInlineKB(txtUserCreated, tgmodel.YesOrNoButtons); err != nil {
+
+	input := service.UserInput{
+		UserId:     c.UserId(),
+		FullName:   s.FullName,
+		ScheduleId: s.ScheduleId,
+		GradesId:   s.GradesId,
+	}
+	if err = r.user.Create(c.Context(), input); err != nil {
+		// если пользователь уже существует, то просто обновляем информацию о нем
+		if errors.Is(err, service.ErrUserAlreadyExists) {
+			if e := r.user.UpdateInfo(c.Context(), input); e != nil {
+				return e
+			}
+			return c.EditMessage("Информация о пользователе успешно обновлена!\n" + txtDefault)
+		}
+		return err
+	}
+
+	if err = c.EditMessageWithInlineKB(txtUserCreated, tgmodel.YesOrNoButtons); err != nil {
 		return err
 	}
 	return c.SetState(stateActionAfterCreate)
@@ -111,146 +103,93 @@ func (r *userRouter) stateChooseUser(c bot.Context) error {
 
 func (r *userRouter) stateActionAfterCreate(c bot.Context) error {
 	if c.Text() == "да" {
-		if err := c.SendMessage(txtAddLoginPassword); err != nil {
+		if err := c.EditMessage(txtAddLoginPassword); err != nil {
 			return err
 		}
 		return c.SetState(stateAddLoginPassword)
 	}
 	_ = c.Clear()
-	return c.SendMessage("Пользователь успешно создан!\n" + txtDefault)
-}
-
-func (r *userRouter) cmdDaySchedule(c bot.Context) error {
-	user, err := r.user.FindUser(c.Context(), c.UserId())
-	if err != nil {
-		return err
-	}
-	schedule, err := r.parser.DaySchedule(c.Context(), user.ScheduleId)
-	if err != nil {
-		return err
-	}
-	if len(schedule) == 0 {
-		return c.SendMessage("На сегодня занятий нет!")
-	}
-	text := "Расписание на сегодня:"
-	for _, lesson := range schedule {
-		text += "\n" + fmt.Sprintf(currentLesson, lesson.Subject, lesson.Name, lesson.Type, lesson.Time, lesson.AuditoriumNum, lesson.BuildingAddr, lesson.Lector) + "\n"
-	}
-	return c.SendMessage(text)
-}
-
-func (r *userRouter) cmdWeekSchedule(c bot.Context) error {
-	user, err := r.user.FindUser(c.Context(), c.UserId())
-	if err != nil {
-		return err
-	}
-	weekSchedule, err := r.parser.WeekSchedule(c.Context(), user.ScheduleId)
-	if err != nil {
-		return err
-	}
-	text := "Расписание на неделю:"
-	for d := 1; d <= 6; d++ {
-		text += fmt.Sprintf("\nРасписание на %s:", dates[d])
-		if len(weekSchedule[d]) == 0 {
-			text += "\nЗанятий нет\n"
-			continue
-		}
-		for _, lesson := range weekSchedule[d] {
-			text += "\n" + fmt.Sprintf(currentLesson, lesson.Subject, lesson.Name, lesson.Type, lesson.Time, lesson.AuditoriumNum, lesson.BuildingAddr, lesson.Lector) + "\n"
-		}
-	}
-	return c.SendMessage(text)
-}
-
-func (r *userRouter) cmdGrades(c bot.Context) error {
-	user, err := r.user.FindUser(c.Context(), c.UserId())
-	if err != nil {
-		return err
-	}
-	if user.Login == "" || user.Password == "" {
-		return c.SendMessage(txtRequiredLoginPass)
-	}
-	grades, err := r.parser.CourseTotalGrades(c.Context(), parser.GradesInput{
-		GradesId:   user.GradesId,
-		ScheduleId: user.ScheduleId,
-		Login:      user.Login,
-		Password:   user.Password,
-	})
-	if err != nil {
-		return err
-	}
-	text := "Вот все оценки по изучаемым дисциплинам в семестре:"
-	for _, grade := range grades {
-		text += "\n" + fmt.Sprintf(currentSubjectGrades, grade.Subject, grade.CurrentResult, grade.CourseUnitResult, grade.PresentRate, grade.AbsentRate, grade.UndefinedRate) + "\n"
-	}
-	return c.SendMessage(text)
+	return c.EditMessage("Пользователь успешно создан!\n" + txtDefault)
 }
 
 func (r *userRouter) cmdStop(c bot.Context) error {
+	_ = c.Clear()
 	if err := c.SendMessageWithInlineKB(txtConfirmDelete, tgmodel.YesOrNoButtons); err != nil {
 		return err
 	}
-	return c.SetState(stateDeleteUser)
+	return c.SetState(stateConfirmDelete)
 }
 
-func (r *userRouter) stateDeleteUser(c bot.Context) error {
+func (r *userRouter) stateConfirmDelete(c bot.Context) error {
 	defer func() { _ = c.Clear() }()
 	if c.Text() == "да" {
-		if err := r.user.DeleteUser(c.Context(), c.UserId()); err != nil {
+		if err := r.user.Delete(c.Context(), c.UserId()); err != nil {
 			if errors.Is(err, service.ErrUserNotFound) {
-				return c.SendMessage(txtUserNotFound)
+				return c.EditMessage(txtUserNotFound)
 			}
 			return err
 		}
-		return c.SendMessage(txtUserDeleted)
+		return c.EditMessage(txtUserDeleted)
 	}
-	return c.SendMessage("Пользователь не удален!\n" + txtDefault)
+	return c.EditMessage("Пользователь не удален!\n" + txtDefault)
 }
 
+var (
+	kbMeBack = tgmodel.BackButton("/me_back")
+)
+
 func (r *userRouter) cmdMe(c bot.Context) error {
+	_ = c.Clear()
 	return c.SendMessageWithInlineKB(txtMyProfile, tgmodel.MyProfileButtons)
 }
 
+func (r *userRouter) callbackMeBack(c bot.Context) error {
+	return c.EditMessageWithInlineKB(txtMyProfile, tgmodel.MyProfileButtons)
+}
+
 func (r *userRouter) callbackAboutMe(c bot.Context) error {
-	u, err := r.user.FindUser(c.Context(), c.UserId())
+	u, err := r.user.Find(c.Context(), c.UserId())
 	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			return c.EditMessage(txtUserNotFound)
+		}
 		return err
 	}
-	user, err := r.parser.FindUserById(c.Context(), u.ScheduleId)
+	info, err := r.parser.FindStudentById(c.Context(), u.ScheduleId)
 	if err != nil {
 		return err
 	}
 	text := "Вот информация о Вашем направлении обучения:\n"
-	text += fmt.Sprintf(foundUser, user.FullName, user.FlowCode, user.SpecialtyName, user.SpecialtyProfile)
-	return c.SendMessage(text)
+	text += fmt.Sprintf(formatStudent, info.FullName, info.SpecialtyName, info.SpecialtyProfile, info.FlowCode)
+	return c.EditMessageWithInlineKB(text, kbMeBack)
 }
 
 func (r *userRouter) callbackRatings(c bot.Context) error {
-	user, err := r.user.FindUser(c.Context(), c.UserId())
+	u, err := r.user.Find(c.Context(), c.UserId())
 	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			return c.EditMessage(txtUserNotFound)
+		}
 		return err
 	}
-	if user.Login == "" || user.Password == "" {
-		return c.SendMessage(txtRequiredLoginPass)
+	if u.Login == "" || u.Password == "" {
+		kb := append(tgmodel.GradesLink, kbMeBack...)
+		return c.EditMessageWithInlineKB(txtRequiredLoginPass, kb)
 	}
-	cgpa, APRs, err := r.parser.UserRatings(c.Context(), parser.GradesInput{
-		GradesId:   user.GradesId,
-		ScheduleId: user.ScheduleId,
-		Login:      user.Login,
-		Password:   user.Password,
+
+	cgpa, ratings, err := r.parser.Ratings(c.Context(), parser.GradesInput{
+		Login:      u.Login,
+		Password:   u.Password,
+		ScheduleId: u.ScheduleId,
+		GradesId:   u.GradesId,
 	})
 	if err != nil {
 		return err
 	}
-	const academicPeriod = "Период: %s\nGPA: %s\nПроцент посещений: %s\nПроцент пропусков: %s\nПроцент без отметки: %s"
-	text := "Вот информация о Ваших рейтингах:\nТекущий CGPA: " + cgpa + "\n"
-	for i := 1; i <= len(APRs); i++ {
-		text += "\n" + fmt.Sprintf(academicPeriod, APRs[i].Name, APRs[i].GPA, APRs[i].PresentRate, APRs[i].AbsentRate, APRs[i].UndefinedRate) + "\n"
-	}
-	return c.SendMessage(text)
-}
 
-func (r *userRouter) cmdHelp(c bot.Context) error {
-	_ = c.Clear()
-	return c.SendMessage(txtHelp)
+	text := "Вот информация о Ваших рейтингах:\nТекущий CGPA: " + cgpa + "\n"
+	for i := 1; i <= len(ratings); i++ {
+		text += "\n" + fmt.Sprintf(formatSemester, ratings[i].Name, ratings[i].GPA, ratings[i].PresentRate, ratings[i].AbsentRate, ratings[i].UndefinedRate) + "\n"
+	}
+	return c.EditMessageWithInlineKB(text, kbMeBack)
 }

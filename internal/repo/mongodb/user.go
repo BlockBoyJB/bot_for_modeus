@@ -11,56 +11,50 @@ import (
 )
 
 type UserRepo struct {
-	*mongo.Mongo
+	pool mongo.Pool
 }
 
 func NewUserRepo(mongo *mongo.Mongo) *UserRepo {
-	return &UserRepo{mongo}
+	return &UserRepo{mongo.Collection("user")}
 }
 
-func (r *UserRepo) CreateUser(ctx context.Context, u dbmodel.User) error {
-	if _, err := r.Pool.InsertOne(ctx, u); err != nil {
+func (r *UserRepo) Create(ctx context.Context, u dbmodel.User) error {
+	if _, err := r.pool.InsertOne(ctx, u); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *UserRepo) GetUserById(ctx context.Context, userId int64) (dbmodel.User, error) {
-	filter := bson.D{{"user_id", userId}}
-
+func (r *UserRepo) FindById(ctx context.Context, id int64) (dbmodel.User, error) {
 	var user dbmodel.User
 
-	err := r.Pool.FindOne(ctx, filter).Decode(&user)
-	if err != nil {
+	if err := r.pool.FindOne(ctx, bson.D{{"user_id", id}}).Decode(&user); err != nil {
 		if errors.Is(err, mgo.ErrNoDocuments) {
 			return dbmodel.User{}, mongoerrs.ErrNotFound
 		}
-
 		return dbmodel.User{}, err
 	}
 	return user, nil
 }
 
-func (r *UserRepo) DeleteUser(ctx context.Context, userId int64) error {
-	filter := bson.D{{"user_id", userId}}
-	_, err := r.Pool.DeleteOne(ctx, filter)
+func (r *UserRepo) Update(ctx context.Context, id int64, data bson.D) error {
+	c, err := r.pool.UpdateOne(ctx, bson.D{{"user_id", id}}, data)
 	if err != nil {
-		if errors.Is(err, mgo.ErrNoDocuments) {
-			return mongoerrs.ErrNotFound
-		}
-
 		return err
+	}
+	if c.MatchedCount == 0 && c.ModifiedCount == 0 {
+		return mongoerrs.ErrNotFound
 	}
 	return nil
 }
 
-func (r *UserRepo) UpdateData(ctx context.Context, userId int64, data bson.D) error {
-	filter := bson.D{{"user_id", userId}}
-	if _, err := r.Pool.UpdateOne(ctx, filter, data); err != nil {
-		if errors.Is(err, mgo.ErrNoDocuments) {
-			return mongoerrs.ErrNotFound
-		}
+func (r *UserRepo) Delete(ctx context.Context, id int64) error {
+	c, err := r.pool.DeleteOne(ctx, bson.D{{"user_id", id}})
+	if err != nil {
 		return err
+	}
+	if c.DeletedCount == 0 {
+		return mongoerrs.ErrNotFound
 	}
 	return nil
 }

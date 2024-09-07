@@ -34,7 +34,10 @@ services:
   selenium:
     container_name: bot-selenium
     image: selenium/standalone-chrome:latest
-    shm_size: "2g"
+    deploy: # локально с 16ГБ+ озу все отлично, но на сервере где <= 2ГБ уже плохо
+      resources:
+        limits:
+          memory: 1gb
     networks:
       - bot
 

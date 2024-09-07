@@ -7,70 +7,71 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type ModeusUser struct {
-	FullName         string
-	FlowCode         string
-	SpecialtyName    string
-	SpecialtyProfile string
-	ScheduleId       string // save to db
-	GradesId         string // save to db
+type Student struct {
+	FullName         string // ФИО
+	FlowCode         string // Код направления
+	SpecialtyName    string // Название направления
+	SpecialtyProfile string // Специальность
+	ScheduleId       string // Id для поиска расписания
+	GradesId         string // Id для поиска оценок
 }
 
-// FindAllUsers чаще всего находит только одного пользователя, однако могут быть приколы у Ивановых Иванов (но на 06.24 таких повторений нет)
-// Несколько пользователей может быть только в случае когда ФИО введено неточно (например только фамилия и имя)
-func (s *Service) FindAllUsers(ctx context.Context, fullName string) ([]ModeusUser, error) {
-	token, err := s.rootToken(ctx)
+func (p *parser) FindStudents(ctx context.Context, fullName string) ([]Student, error) {
+	token, err := p.rootToken(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var result []ModeusUser
-	response, err := s.modeus.FindStudents(token, fullName)
+
+	response, err := p.modeus.FindStudents(token, fullName)
 	if err != nil {
 		if errors.Is(err, modeus.ErrStudentsNotFound) {
 			return nil, ErrStudentsNotFound
 		}
-		log.Errorf("%s/FindAllUsers error find students from modeus: %s", serviceParserPrefixLog, err)
+		log.Errorf("%s/FindStudents error find students from modeus: %s", parserServicePrefixLog, err)
 		return nil, err
 	}
-	for _, student := range response.Embedded.Students {
-		u := ModeusUser{
-			FullName:         "Ошибка",
-			FlowCode:         student.FlowCode,
-			SpecialtyName:    student.SpecialtyName,
-			SpecialtyProfile: student.SpecialtyProfile,
-			ScheduleId:       student.PersonId,
-			GradesId:         student.Id,
+
+	var result []Student
+	for _, s := range response.Embedded.Students {
+		student := Student{
+			FullName:         "Ошибка", // Ставим ошибку по дефолту, потому что ФИО содержится в response.Embedded.Persons
+			FlowCode:         s.FlowCode,
+			SpecialtyName:    s.SpecialtyName,
+			SpecialtyProfile: s.SpecialtyProfile,
+			ScheduleId:       s.PersonId,
+			GradesId:         s.Id,
 		}
-		// Идем доп циклом потому что порядок в persons и students иногда не совпадает
+		// Идем доп циклом потому что порядок в persons и students иногда не совпадает.
+		// Да, получается O(n^2), но у нас лимит на поиск пользователей маленький (максимум 10)
 		for _, person := range response.Embedded.Persons {
-			if person.Id == student.PersonId {
-				u.FullName = person.FullName
+			if person.Id == s.PersonId {
+				student.FullName = person.FullName
 				break
 			}
 		}
-		result = append(result, u)
+		result = append(result, student)
 	}
 	return result, nil
 }
 
-func (s *Service) FindUserById(ctx context.Context, scheduleId string) (ModeusUser, error) {
-	token, err := s.rootToken(ctx)
+func (p *parser) FindStudentById(ctx context.Context, scheduleId string) (Student, error) {
+	token, err := p.rootToken(ctx)
 	if err != nil {
-		return ModeusUser{}, err
+		return Student{}, err
 	}
-	student, err := s.modeus.FindStudentById(token, scheduleId)
+	student, err := p.modeus.FindStudentById(token, scheduleId)
 	if err != nil {
-		return ModeusUser{}, err
+		log.Errorf("%s/FindStudentById error find student: %s", parserServicePrefixLog, err)
+		return Student{}, err
 	}
 	if student.Page.TotalElements != 1 {
-		log.Errorf("%s/FindUserById error find user by id: more than 1 was found", serviceParserPrefixLog)
-		return ModeusUser{}, errors.New("students with specified id more than 1")
+		return Student{}, errors.New("students with specified id more than 1")
 	}
-	user := student.Embedded.Students[0]
-	return ModeusUser{
+	s := student.Embedded.Students[0]
+	return Student{
 		FullName:         student.Embedded.Persons[0].FullName,
-		FlowCode:         user.FlowCode,
-		SpecialtyName:    user.SpecialtyName,
-		SpecialtyProfile: user.SpecialtyProfile,
+		FlowCode:         s.FlowCode,
+		SpecialtyName:    s.SpecialtyName,
+		SpecialtyProfile: s.SpecialtyProfile,
 	}, nil
 }

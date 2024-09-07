@@ -16,6 +16,8 @@ services:
     image: mongo:5.0-rc-focal
     ports:
       - "27017:27017"
+    volumes:
+      - dbdata:/data/db
     healthcheck:
       test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
       interval: 5s
@@ -29,7 +31,10 @@ services:
   selenium:
     container_name: bot-selenium
     image: selenium/standalone-chrome:latest
-    shm_size: "2g"
+    deploy:
+      resources:
+        limits:
+          memory: 1gb
     networks:
       - bot
 

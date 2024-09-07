@@ -12,20 +12,20 @@ const (
 )
 
 type Event struct {
-	Name          string      `json:"name"`
-	NameShort     string      `json:"nameShort"`
-	Description   interface{} `json:"description"`
-	TypeId        string      `json:"typeId"`
+	Name          string      `json:"name"`        // Название пары
+	NameShort     string      `json:"nameShort"`   // Чаще всего тут тип занятия (например Лекционное занятие)
+	Description   interface{} `json:"description"` // ???
+	TypeId        string      `json:"typeId"`      // Тип занятия (лекция, практика, лабораторная и тд)
 	FormatId      string      `json:"formatId"`
-	Start         time.Time   `json:"start"`
-	End           time.Time   `json:"end"`
-	StartsAtLocal string      `json:"startsAtLocal"`
-	EndsAtLocal   string      `json:"endsAtLocal"`
-	StartsAt      string      `json:"startsAt"`
-	EndsAt        string      `json:"endsAt"`
+	Start         time.Time   `json:"start"`         // Начало занятия
+	End           time.Time   `json:"end"`           // Конец занятия
+	StartsAtLocal string      `json:"startsAtLocal"` // Начало по местному (тюменскому)
+	EndsAtLocal   string      `json:"endsAtLocal"`   // Конец по местному
+	StartsAt      string      `json:"startsAt"`      // Непонятно зачем дублирование
+	EndsAt        string      `json:"endsAt"`        // Непонятно зачем дублирование
 	HoldingStatus struct {
-		Id                  string      `json:"id"`
-		Name                string      `json:"name"`
+		Id                  string      `json:"id"`   // DRAFT не проведено, HELD проведено
+		Name                string      `json:"name"` // Статус
 		AudModifiedAt       interface{} `json:"audModifiedAt"`
 		AudModifiedBy       interface{} `json:"audModifiedBy"`
 		AudModifiedBySystem interface{} `json:"audModifiedBySystem"`
@@ -172,30 +172,30 @@ type ScheduleResponse struct { // Как хорошо что у goland есть 
 		//	} `json:"_links"`
 		//	Id string `json:"id"`
 		//} `json:"lesson-realization-teams"`
-		//LessonRealizations []struct {
-		//	Name        string `json:"name"`
-		//	NameShort   string `json:"nameShort"`
-		//	PrototypeId string `json:"prototypeId"`
-		//	Ordinal     int    `json:"ordinal"`
-		//	Links       struct {
-		//		Self struct {
-		//			Href string `json:"href"`
-		//		} `json:"self"`
-		//	} `json:"_links"`
-		//	Id string `json:"id"`
-		//} `json:"lesson-realizations"`
-		//EventLocations []struct {
-		//	EventId        string      `json:"eventId"`
-		//	CustomLocation interface{} `json:"customLocation"`
-		//	Links          struct {
-		//		Self []struct {
-		//			Href string `json:"href"`
-		//		} `json:"self"`
-		//		EventRooms struct {
-		//			Href string `json:"href"`
-		//		} `json:"event-rooms,omitempty"`
-		//	} `json:"_links"`
-		//} `json:"event-locations"`
+		LessonRealizations []struct {
+			Name        string `json:"name"`
+			NameShort   string `json:"nameShort"`
+			PrototypeId string `json:"prototypeId"`
+			Ordinal     int    `json:"ordinal"`
+			Links       struct {
+				Self struct {
+					Href string `json:"href"`
+				} `json:"self"`
+			} `json:"_links"`
+			Id string `json:"id"`
+		} `json:"lesson-realizations"`
+		EventLocations []struct {
+			EventId        string `json:"eventId"`
+			CustomLocation string `json:"customLocation"`
+			Links          struct {
+				Self []struct {
+					Href string `json:"href"`
+				} `json:"self"`
+				EventRooms struct {
+					Href string `json:"href"`
+				} `json:"event-rooms,omitempty"`
+			} `json:"_links"`
+		} `json:"event-locations"`
 		//Durations []struct {
 		//	EventId    string `json:"eventId"`
 		//	Value      int    `json:"value"`
@@ -295,7 +295,7 @@ type ScheduleRequest struct {
 	AttendeePersonId []string  `json:"attendeePersonId"`
 }
 
-func (s *Modeus) Schedule(token string, input ScheduleRequest) (ScheduleResponse, error) {
+func (s *modeus) Schedule(token string, input ScheduleRequest) (ScheduleResponse, error) {
 	resp, err := s.makeRequest(token, http.MethodPost, defaultScheduleUri, input)
 	if err != nil {
 		return ScheduleResponse{}, err

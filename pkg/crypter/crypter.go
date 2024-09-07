@@ -7,58 +7,84 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"golang.org/x/crypto/pbkdf2"
 	"io"
 )
 
-type PasswordCrypter interface {
+type Crypter interface {
 	Encrypt(text string) (string, error)
 	Decrypt(text string) (string, error)
 }
 
-type Service struct {
+const defaultSaltBlockSize = 16
+
+type crypter struct {
 	secret string
 }
 
-func NewPasswordCrypter(secret string) *Service {
-	return &Service{secret: secret}
+func NewCrypter(secret string) Crypter {
+	return &crypter{secret: secret}
 }
 
-func (h *Service) createHash() []byte {
-	hash := sha256.Sum256([]byte(h.secret))
-	return hash[:]
+func (c *crypter) createKey(salt []byte) []byte {
+	return pbkdf2.Key([]byte(c.secret), salt, 100000, 32, sha256.New)
 }
 
-func (h *Service) Encrypt(text string) (string, error) {
-	block, err := aes.NewCipher(h.createHash())
+func (c *crypter) Encrypt(text string) (string, error) {
+	salt := make([]byte, defaultSaltBlockSize)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(c.createKey(salt))
 	if err != nil {
 		return "", err
 	}
-	plainText := []byte(text)
-	cipherText := make([]byte, aes.BlockSize+len(plainText))
-	iv := cipherText[:aes.BlockSize]
-	if _, err = io.ReadFull(rand.Reader, iv); err != nil {
+
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
 		return "", err
 	}
-	stream := cipher.NewCFBEncrypter(block, iv)
-	stream.XORKeyStream(cipherText[aes.BlockSize:], plainText)
-	return base64.URLEncoding.EncodeToString(cipherText), nil
+
+	nonce := make([]byte, aesGCM.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+
+	cipherText := aesGCM.Seal(nonce, nonce, []byte(text), nil)
+	return base64.URLEncoding.EncodeToString(append(salt, cipherText...)), nil
 }
 
-func (h *Service) Decrypt(text string) (string, error) {
+func (c *crypter) Decrypt(text string) (string, error) {
 	cipherText, err := base64.URLEncoding.DecodeString(text)
 	if err != nil {
 		return "", err
 	}
-	block, err := aes.NewCipher(h.createHash())
+
+	if len(cipherText) < defaultSaltBlockSize {
+		return "", errors.New("cipher text too short")
+	}
+
+	salt, cipherText := cipherText[:defaultSaltBlockSize], cipherText[defaultSaltBlockSize:]
+
+	block, err := aes.NewCipher(c.createKey(salt))
 	if err != nil {
 		return "", err
 	}
-	if len(cipherText) < aes.BlockSize {
+
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	if len(cipherText) < aesGCM.NonceSize() {
 		return "", errors.New("cipher text too short")
 	}
-	iv := cipherText[:aes.BlockSize]
-	cipherText = cipherText[aes.BlockSize:]
-	stream := cipher.NewCFBDecrypter(block, iv)
-	stream.XORKeyStream(cipherText, cipherText)
-	return string(cipherText), nil
+
+	nonce, cipherText := cipherText[:aesGCM.NonceSize()], cipherText[aesGCM.NonceSize():]
+	plainText, err := aesGCM.Open(nil, nonce, cipherText, nil)
+	if err != nil {
+		return "", err
+	}
+
+	return string(plainText), nil
 }

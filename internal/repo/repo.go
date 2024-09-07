@@ -9,10 +9,10 @@ import (
 )
 
 type User interface {
-	CreateUser(ctx context.Context, u dbmodel.User) error
-	GetUserById(ctx context.Context, userId int64) (dbmodel.User, error)
-	DeleteUser(ctx context.Context, userId int64) error
-	UpdateData(ctx context.Context, userId int64, data bson.D) error
+	Create(ctx context.Context, u dbmodel.User) error
+	FindById(ctx context.Context, id int64) (dbmodel.User, error)
+	Update(ctx context.Context, id int64, data bson.D) error
+	Delete(ctx context.Context, id int64) error
 }
 
 type Repositories struct {

@@ -25,10 +25,10 @@ func Run() {
 	if err != nil {
 		log.Fatalf("config init error: %s", err)
 	}
-	setLogger(cfg.Log.Level, cfg.Log.Output)
+	logger := setLogger(cfg.Log.Level, cfg.Log.Output)
 
 	// Initializing database
-	mongodb, err := mongo.NewMongo(ctx, cfg.MongoDB.Url, cfg.MongoDB.DB, cfg.MongoDB.Collection)
+	mongodb, err := mongo.NewMongo(ctx, cfg.MongoDB.Url, cfg.MongoDB.DB)
 	if err != nil {
 		log.Fatalf("database init error: %s", err)
 	}
@@ -42,31 +42,30 @@ func Run() {
 	defer selenium.CloseClient()
 
 	// redis database
-	rdb := redis.NewRedis(cfg.Redis.Url, redis.MaxPoolSize(cfg.Redis.MaxPoolSize))
+	rdb := redis.NewRedis(cfg.Redis.Url)
 	defer rdb.Close()
 
-	d := service.ServicesDependencies{
+	d := &service.ServicesDependencies{
 		Repos:     repo.NewRepositories(mongodb),
 		Parser:    modeus.NewModeus(selenium),
 		Redis:     rdb,
-		Crypter:   crypter.NewPasswordCrypter(cfg.Crypter.Secret),
+		Crypter:   crypter.NewCrypter(cfg.Crypter.Secret),
 		RootLogin: cfg.Root.Login,
 		RootPass:  cfg.Root.Password,
 	}
 	services := service.NewServices(d)
 
-	s := bot.Settings{
+	s := &bot.Settings{
 		Token:     cfg.Bot.Token,
 		IsWebhook: cfg.Bot.IsWebhook,
-		Redis:     rdb.Client,
 		Ctx:       ctx,
 	}
 	// tg client
-	b, err := bot.NewBot(s, bot.SetCommands(tgmodel.UICommands))
+	b, err := bot.NewBot(s, bot.SetCommands(tgmodel.UICommands), bot.RedisStorage(ctx, rdb.Conn()), bot.SetLogger(logger))
 	if err != nil {
 		log.Fatalf("tg client init error: %s", err)
 	}
-	v2.NewRouter(b, services)
+	v2.NewHandler(b, services)
 	go b.ListenAndServe()
 
 	log.Info("all services are running!")

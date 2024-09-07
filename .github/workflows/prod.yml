@@ -5,7 +5,30 @@ on:
     branches:
       - main
 
+env:
+  TEST_CONTAINER_NAME: "test_mongo"
+
 jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: install go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22.0
+
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: create test db
+        run: docker run --name $(echo TEST_CONTAINER_NAME) --rm -d -p 27017:27017 mongo:5.0-rc-focal
+
+      - name: run tests
+        run: go test -v ./...
+
+      - name: remove containers
+        run: docker stop $(echo TEST_CONTAINER_NAME)
+
   build_and_push:
     runs-on: ubuntu-latest
     steps:
@@ -41,6 +64,7 @@ jobs:
           password: ${{ secrets.PASSWORD }}
           source: "deploy/"
           target: ${{ secrets.WORKDIR }}
+          strip_components: 1
 
       - name: deploy via ssh
         uses: appleboy/ssh-action@v1.0.3

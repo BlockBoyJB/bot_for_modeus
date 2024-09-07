@@ -6,75 +6,118 @@ import (
 	"bot_for_modeus/pkg/bot"
 	"errors"
 	"fmt"
-	"strconv"
 )
 
-type studentsRouter struct {
+type studentRouter struct {
 	parser parser.Parser
 }
 
-func newStudentsRouter(cmd, state *bot.Group, parser parser.Parser) {
-	r := studentsRouter{parser: parser}
+func newStudentRouter(b *bot.Bot, parser parser.Parser) {
+	r := &studentRouter{
+		parser: parser,
+	}
 
-	cmd.AddRoute("/other_student", r.cmdOtherStudent)
-	state.AddRoute(stateInputOtherStudent, r.stateInputOtherStudent)
-	state.AddRoute(stateChooseOtherStudent, r.stateChooseOtherStudent)
-	state.AddRoute(stateChooseStudentAction, r.stateChooseStudentAction)
+	b.Command("/other_student", r.cmdOtherStudent)
+	b.Callback("/other_student_back", r.callbackOtherStudentBack)
+	b.State(stateInputOtherStudent, r.stateInputOtherStudent)
+	b.Callback("/choose_other_student_back", r.callbackChooseOtherStudentBack)
+	b.State(stateChooseOtherStudent, r.stateChooseOtherStudent)
+	b.Callback("/choose_other_student_action_back", r.callbackChooseOtherStudentActionBack)
+	b.State(stateChooseOtherStudentAction, r.stateChooseOtherStudentAction)
+	b.State(stateOtherStudentSchedule, r.stateOtherStudentSchedule)
 }
 
-func (r *studentsRouter) cmdOtherStudent(c bot.Context) error {
+func (r *studentRouter) cmdOtherStudent(c bot.Context) error {
+	_ = c.Clear()
 	if err := c.SendMessage(txtInputOtherStudent); err != nil {
 		return err
 	}
 	return c.SetState(stateInputOtherStudent)
 }
 
-func (r *studentsRouter) stateInputOtherStudent(c bot.Context) error {
-	students, err := r.parser.FindAllUsers(c.Context(), c.Text())
+func (r *studentRouter) callbackOtherStudentBack(c bot.Context) error {
+	if err := c.EditMessage(txtInputOtherStudent); err != nil {
+		return err
+	}
+	return c.SetState(stateInputOtherStudent)
+}
+
+func (r *studentRouter) stateInputOtherStudent(c bot.Context) error {
+	students, err := r.parser.FindStudents(c.Context(), c.Text())
 	if err != nil {
 		if errors.Is(err, parser.ErrStudentsNotFound) {
 			return c.SendMessage(fmt.Sprintf(txtStudentNotFound, c.Text()))
 		}
 		return err
 	}
-	if err = c.UpdateData("students", students); err != nil {
+	if err = c.SetData("students", students); err != nil {
 		return err
 	}
+
 	text, kb := formatStudents(students)
+	kb = append(kb, tgmodel.BackButton("/other_student_back")...)
 	if err = c.SendMessageWithInlineKB(text, kb); err != nil {
 		return err
 	}
 	return c.SetState(stateChooseOtherStudent)
 }
 
-func (r *studentsRouter) stateChooseOtherStudent(c bot.Context) error {
-	var students []parser.ModeusUser
+func (r *studentRouter) callbackChooseOtherStudentBack(c bot.Context) error {
+	var students []parser.Student
 	if err := c.GetData("students", &students); err != nil {
 		return err
 	}
-	num, err := strconv.Atoi(c.Text())
-	if err != nil {
+	text, kb := formatStudents(students)
+	kb = append(kb, tgmodel.BackButton("/other_student_back")...)
+	if err := c.EditMessageWithInlineKB(text, kb); err != nil {
 		return err
 	}
-	student := students[num-1]
-	if err = c.UpdateData("student", student.ScheduleId); err != nil {
-		return err
-	}
-	if err = c.SendMessageWithInlineKB(txtChooseStudentAction, tgmodel.OtherStudentButtons); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseStudentAction)
+	return c.SetState(stateChooseOtherStudent)
 }
 
-func (r *studentsRouter) stateChooseStudentAction(c bot.Context) error {
-	defer func() { _ = c.Clear() }()
-	var studentId string
-	if err := c.GetData("student", &studentId); err != nil {
+func (r *studentRouter) stateChooseOtherStudent(c bot.Context) error {
+	s, err := findStudent(c)
+	if err != nil {
+		if errors.Is(err, ErrIncorrectInput) {
+			return c.SendMessage(txtWarn)
+		}
 		return err
 	}
-	text, err := studentSchedule(c.Context(), r.parser, c.Text(), studentId)
+
+	if err = c.SetData("schedule_id", s.ScheduleId); err != nil {
+		return err
+	}
+
+	if err = c.EditMessageWithInlineKB(txtChooseOtherStudentAction, tgmodel.OtherStudentButtons); err != nil {
+		return err
+	}
+	return c.SetState(stateChooseOtherStudentAction)
+}
+
+func (r *studentRouter) callbackChooseOtherStudentActionBack(c bot.Context) error {
+	if err := c.EditMessageWithInlineKB(txtChooseOtherStudentAction, tgmodel.OtherStudentButtons); err != nil {
+		return err
+	}
+	return c.SetState(stateChooseOtherStudentAction)
+}
+
+func (r *studentRouter) stateChooseOtherStudentAction(c bot.Context) error {
+	var scheduleId string
+	if err := c.GetData("schedule_id", &scheduleId); err != nil {
+		return err
+	}
+
+	text, kb, err := studentCurrentSchedule(c, r.parser, scheduleId)
 	if err != nil {
 		return err
 	}
-	return c.SendMessage(text)
+	kb = append(kb, tgmodel.BackButton("/choose_other_student_action_back")...)
+	if err = c.EditMessageWithInlineKB(text, kb); err != nil {
+		return err
+	}
+	return c.SetState(stateOtherStudentSchedule)
+}
+
+func (r *studentRouter) stateOtherStudentSchedule(c bot.Context) error {
+	return studentSchedule(c, r.parser, tgmodel.BackButton("/choose_other_student_action_back"))
 }

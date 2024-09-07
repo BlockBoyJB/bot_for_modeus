@@ -21,13 +21,11 @@ type (
 		IsWebhook bool   `env-required:"true" env:"BOT_WEBHOOK"`
 	}
 	MongoDB struct {
-		Url        string `env-required:"true" env:"MONGO_URL"`
-		DB         string `env-required:"true" env:"MONGO_DB"`
-		Collection string `env-required:"true" env:"MONGO_COLLECTION"`
+		Url string `env-required:"true" env:"MONGO_URL"`
+		DB  string `env-required:"true" env:"MONGO_DB"`
 	}
 	Redis struct {
-		Url         string `env-required:"true" env:"REDIS_URL"`
-		MaxPoolSize int    `env-required:"true" env:"REDIS_MAX_POOL_SIZE"`
+		Url string `env-required:"true" env:"REDIS_URL"`
 	}
 	Log struct {
 		Level  string `env-required:"true" env:"LOG_LEVEL"`

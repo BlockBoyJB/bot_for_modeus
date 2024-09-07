@@ -6,24 +6,26 @@ import (
 	"time"
 )
 
-type Pool interface {
-	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
-	Get(ctx context.Context, key string) *redis.StringCmd
-	Del(ctx context.Context, keys ...string) *redis.IntCmd
-	Exists(ctx context.Context, keys ...string) *redis.IntCmd
-}
-
 const (
 	defaultMaxPoolSize  = 10
 	defaultConnAttempts = 10
 	defaultConnTimeout  = 1 * time.Second
 )
 
-type Redis struct {
+type Redis interface {
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Del(ctx context.Context, keys ...string) *redis.IntCmd
+	Exists(ctx context.Context, keys ...string) *redis.IntCmd
+	Conn() *redis.Client
+	Close()
+}
+
+type rdb struct {
 	*redis.Client
 }
 
-func NewRedis(url string, opts ...Option) *Redis {
+func NewRedis(url string, opts ...Option) Redis {
 	rdbOpts := &redis.Options{
 		Addr:            url,
 		PoolSize:        defaultMaxPoolSize,
@@ -33,11 +35,13 @@ func NewRedis(url string, opts ...Option) *Redis {
 	for _, option := range opts {
 		option(rdbOpts)
 	}
-	return &Redis{redis.NewClient(rdbOpts)}
+	return &rdb{redis.NewClient(rdbOpts)}
 }
 
-func (r *Redis) Close() {
-	if r.Client != nil {
-		_ = r.Client.Close()
-	}
+func (r *rdb) Conn() *redis.Client {
+	return r.Client
+}
+
+func (r *rdb) Close() {
+	_ = r.Client.Close()
 }

@@ -3,45 +3,41 @@ package bot
 import (
 	"context"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/redis/go-redis/v9"
-	log "github.com/sirupsen/logrus"
+	"log"
 	"net/http"
+	"os"
 	"sync"
 )
 
 // Default settings
 const (
 	defaultParseMode = "HTML"
-	botPrefixLog     = "bot/bot"
 )
 
-// Incoming message types
-const (
-	OnCommand  = "COMMAND"
-	OnCallback = "CALLBACK"
-	OnState    = "STATE"
-)
+type Logger interface {
+	Printf(format string, args ...any)
+}
 
 type Bot struct {
 	client     *tgbotapi.BotAPI
 	wg         *sync.WaitGroup
 	ctx        context.Context
 	parseMode  string
-	routers    map[string]*Group
+	routers    *router
 	middleware []MiddlewareFunc
-	storage    *storage
-	stop       chan interface{} // TODO chan error???
+	storage    storage
+	logger     Logger
+	stop       chan bool
 	isWebhook  bool
 }
 
 type Settings struct {
 	Token     string
 	IsWebhook bool
-	Redis     *redis.Client
 	Ctx       context.Context
 }
 
-func NewBot(s Settings, opts ...Option) (*Bot, error) {
+func NewBot(s *Settings, opts ...Option) (*Bot, error) {
 	client, err := tgbotapi.NewBotAPI(s.Token)
 	if err != nil {
 		return nil, err
@@ -54,9 +50,10 @@ func NewBot(s Settings, opts ...Option) (*Bot, error) {
 		wg:        new(sync.WaitGroup),
 		ctx:       s.Ctx,
 		parseMode: defaultParseMode,
-		routers:   make(map[string]*Group),
-		storage:   newStorage(s.Redis),
-		stop:      make(chan interface{}),
+		routers:   newRouter(),
+		storage:   newMemoryStorage(),
+		logger:    log.New(os.Stdout, "/bot", 4),
+		stop:      make(chan bool),
 		isWebhook: s.IsWebhook,
 	}
 	for _, option := range opts {
@@ -73,7 +70,7 @@ func (b *Bot) ListenAndServe() {
 		updates = b.client.ListenForWebhook("/")
 		go func() {
 			if err := http.ListenAndServe("0.0.0.0:8000", nil); err != nil {
-				log.Errorf("%s/ListenAndServe error handle incoming webhook message: %s", botPrefixLog, err)
+				b.logger.Printf("/ListenAndService error handle request: %s", err)
 			}
 		}()
 	} else {
@@ -85,79 +82,67 @@ func (b *Bot) ListenAndServe() {
 		select {
 		case u := <-updates:
 			b.wg.Add(1)
-			go b.ProcessMessage(u)
+			go b.processMessage(u)
 		case <-b.stop:
 			return
 		}
 	}
 }
 
-func (b *Bot) Shutdown() {
-	b.stop <- "stop"
-	b.client.StopReceivingUpdates()
-	b.wg.Wait()
-}
-
-func (b *Bot) ProcessMessage(u tgbotapi.Update) {
+func (b *Bot) processMessage(u tgbotapi.Update) {
 	defer b.wg.Done()
-	c := b.newContext(u)
+	c := b.NewContext(u)
+
+	// на коллбэк (нажатие инлайн кнопки) нужно ответить пустым, чтобы убрать анимацию "ожидания" на кнопке
 	if u.CallbackQuery != nil {
-		cb := tgbotapi.NewCallback(u.CallbackQuery.ID, "")
-		if _, err := b.client.Request(cb); err != nil {
-			log.Errorf("%s/ProcessMessage error answer empty callback: %s", botPrefixLog, err)
-		}
-		if err := b.removeMessageInlineKB(u.CallbackQuery); err != nil {
-			log.Errorf("%s/ProcessMessage error remove message inline kb: %s", botPrefixLog, err)
-		}
+		b.answerEmptyCallback(u.CallbackQuery)
 	}
+
 	f, ok := b.handle(u)
-	if ok {
-		if b.middleware != nil {
-			f = applyMiddleware(f, b.middleware...)
-		}
-		if err := f(c); err != nil {
-			log.Errorf("%s/ProcessMessage error handle message: %s", botPrefixLog, err)
-		}
+	if !ok {
+		return
+	}
+	if b.middleware != nil {
+		f = applyMiddleware(f, b.middleware...)
+	}
+	if err := f(c); err != nil {
+		b.logger.Printf("/processMessage handle message func err: %s", err)
 	}
 }
 
+// Ищем нужную ручку для обработки...
 func (b *Bot) handle(u tgbotapi.Update) (HandlerFunc, bool) {
 	var userId int64
+
 	if u.Message != nil {
 		if u.Message.IsCommand() {
-			g := b.routers[OnCommand]
-			f, ok := g.routes[u.Message.Text]
-			if ok && g.middleware != nil {
-				return applyMiddleware(f, g.middleware...), true
-			}
+			f, ok := b.routers.command[u.Message.Text]
 			return f, ok
 		}
 		userId = u.Message.From.ID
 	}
 	if u.CallbackQuery != nil {
-		g := b.routers[OnCallback]
-		f, ok := g.routes[u.CallbackQuery.Data]
+		f, ok := b.routers.callback[u.CallbackQuery.Data]
 		if ok {
-			if g.middleware != nil {
-				return applyMiddleware(f, g.middleware...), true
-			}
 			return f, true
 		}
 		userId = u.CallbackQuery.From.ID
 	}
-	g := b.routers[OnState]
-	state, _ := b.storage.GetState(b.ctx, userId)
-	f, ok := g.routes[state]
-	if ok && g.middleware != nil {
-		return applyMiddleware(f, g.middleware...), true
-	}
+	// Если условия выше ничего не вернули, значит это либо обычное сообщение от пользователя (не /команда) (попросили его что-то ввести),
+	// либо в инлайн кнопке на коллбэк есть какое-то значение, которое надо обработать отдельно от ручки коллбэков.
+	// Соответственно, при таких вариантах это какое-то состояние пользователя
+	state, _ := b.storage.getState(userId)
+	f, ok := b.routers.state[state]
 	return f, ok
 }
 
-func (b *Bot) removeMessageInlineKB(query *tgbotapi.CallbackQuery) error {
-	msg := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, query.Message.Text)
-	if _, err := b.client.Send(msg); err != nil {
-		return err
-	}
-	return nil
+func (b *Bot) Shutdown() {
+	b.stop <- true
+	b.client.StopReceivingUpdates()
+	b.wg.Wait()
+}
+
+func (b *Bot) answerEmptyCallback(c *tgbotapi.CallbackQuery) {
+	cb := tgbotapi.NewCallback(c.ID, "")
+	_, _ = b.client.Request(cb)
 }

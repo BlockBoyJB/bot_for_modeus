@@ -3,10 +3,120 @@ package bot
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/redis/go-redis/v9"
-	log "github.com/sirupsen/logrus"
+	"sync"
+	"time"
 )
+
+var (
+	ErrKeyNotExists = errors.New("specified key does not exists")
+)
+
+// Реализация aiogram fsm (машины состояний)
+// для удобства состояния хранятся в строках, а все данные - в виде мапы, где ключ - строка для удобства поиска,
+// а значение - массив байтов для гибкого хранения разных структур
+type storage interface {
+	setState(id int64, state string) error
+	getState(id int64) (string, error)
+	setData(id int64, key string, v any) error
+	setTempData(id int64, key string, v any, d time.Duration) error
+	getData(id int64, key string, v any) error
+	clear(id int64) error
+}
+
+// Чтобы был для удобства
+type memoryStorage struct {
+	sync.RWMutex
+	state map[int64]string
+	data  map[int64]map[string][]byte
+}
+
+func newMemoryStorage() *memoryStorage {
+	return &memoryStorage{
+		state: map[int64]string{},
+		data:  make(map[int64]map[string][]byte),
+	}
+}
+
+func (s *memoryStorage) setState(id int64, state string) error {
+	s.Lock()
+	defer s.Unlock()
+	s.state[id] = state
+	return nil
+}
+
+func (s *memoryStorage) getState(id int64) (string, error) {
+	s.RLock()
+	defer s.RUnlock()
+	state, ok := s.state[id]
+	if !ok {
+		return "", ErrKeyNotExists
+	}
+	return state, nil
+}
+
+func (s *memoryStorage) __setData(id int64, data map[string][]byte) {
+	s.Lock()
+	defer s.Unlock()
+	s.data[id] = data
+}
+
+func (s *memoryStorage) __getData(id int64) map[string][]byte {
+	s.RLock()
+	defer s.RUnlock()
+	data, ok := s.data[id]
+	if !ok {
+		return map[string][]byte{}
+	}
+	return data
+}
+
+func (s *memoryStorage) setData(id int64, key string, v any) error {
+	data := s.__getData(id)
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	data[key] = b
+	s.__setData(id, data)
+	return nil
+}
+
+func (s *memoryStorage) setTempData(id int64, key string, v any, d time.Duration) error {
+	data := s.__getData(id)
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	data[key] = b
+	s.__setData(id, data)
+	go func() {
+		time.Sleep(d)
+		data := s.__getData(id)
+		delete(data, key)
+		s.__setData(id, data)
+	}()
+	return nil
+}
+
+func (s *memoryStorage) getData(id int64, key string, v any) error {
+	data := s.__getData(id)
+	b, ok := data[key]
+	if !ok {
+		return ErrKeyNotExists
+	}
+	return json.Unmarshal(b, v)
+}
+
+func (s *memoryStorage) clear(id int64) error {
+	s.Lock()
+	defer s.Unlock()
+	delete(s.state, id)
+	delete(s.data, id)
+	return nil
+}
 
 // Ключи, по которым сохраняются данные пользователя (привет aiogram)
 const (
@@ -14,115 +124,112 @@ const (
 	defaultDataKey  = "fsm:%d:data"
 )
 
-const (
-	storagePrefixLog = "bot/storage"
-)
-
-// Реализация aiogram redis fsm (машины состояний)
-// для удобства состояния хранятся в строках, а все данные - в виде мапы, где ключ - строка для удобства поиска,
-// а значение - массив байтов для гибкого хранения разных структур
-type storage struct {
+type redisStorage struct {
 	*redis.Client
+	ctx context.Context
 }
 
-func newStorage(redis *redis.Client) *storage {
-	return &storage{redis}
-}
-
-func (s *storage) SetState(ctx context.Context, id int64, state string) error {
-	if err := s.Set(ctx, stateKey(id), state, 0).Err(); err != nil {
-		log.Errorf("%s/SetState error set state: %s", storagePrefixLog, err)
-		return err
+func newRedisStorage(ctx context.Context, redis *redis.Client) *redisStorage {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return nil
-}
-
-func (s *storage) GetState(ctx context.Context, id int64) (string, error) {
-	state, err := s.Get(ctx, stateKey(id)).Result()
-	if err != nil {
-		log.Errorf("%s/GetState error get state: %s", storagePrefixLog, err)
-		return "", err
+	return &redisStorage{
+		Client: redis,
+		ctx:    ctx,
 	}
-	return state, nil
 }
 
-func (s *storage) _setData(ctx context.Context, id int64, data map[string][]byte) error {
+func (s *redisStorage) setState(id int64, state string) error {
+	return s.Set(s.ctx, s.stateKey(id), state, 0).Err()
+}
+
+func (s *redisStorage) getState(id int64) (string, error) {
+	return s.Get(s.ctx, s.stateKey(id)).Result()
+}
+
+func (s *redisStorage) __setData(id int64, data map[string][]byte, d time.Duration) error {
 	b, err := json.Marshal(data)
 	if err != nil {
-		log.Errorf("%s/_setData error marshal data: %s", storagePrefixLog, err)
 		return err
 	}
-	if err = s.Set(ctx, dataKey(id), b, 0).Err(); err != nil {
-		log.Errorf("%s/_setData error set data: %s", storagePrefixLog, err)
-		return err
-	}
-	return nil
+	return s.Set(s.ctx, s.dataKey(id), b, d).Err()
 }
 
-func (s *storage) _getData(ctx context.Context, id int64) (map[string][]byte, error) {
-	var data map[string][]byte
-	ok, err := s.Exists(ctx, dataKey(id)).Result()
+func (s *redisStorage) __getData(id int64) (map[string][]byte, error) {
+	ok, err := s.Exists(s.ctx, s.dataKey(id)).Result()
 	if err != nil {
-		log.Errorf("%s/_getData error check exist data: %s", storagePrefixLog, err)
 		return nil, err
 	}
 	if ok == 0 {
 		return make(map[string][]byte), nil
 	}
-	b, err := s.Get(ctx, dataKey(id)).Bytes()
+
+	var data map[string][]byte
+	b, err := s.Get(s.ctx, s.dataKey(id)).Bytes()
 	if err != nil {
-		log.Errorf("%s/_getData error get data: %s", storagePrefixLog, err)
 		return nil, err
 	}
 	if err = json.Unmarshal(b, &data); err != nil {
-		log.Errorf("%s/_getData error unmarshal data: %s", storagePrefixLog, err)
 		return nil, err
 	}
 	return data, nil
 }
 
-func (s *storage) GetData(ctx context.Context, id int64, key string, v interface{}) error {
-	data, err := s._getData(ctx, id)
+func (s *redisStorage) setData(id int64, key string, v any) error {
+	data, err := s.__getData(id)
 	if err != nil {
 		return err
 	}
-	if err = json.Unmarshal(data[key], v); err != nil {
-		log.Errorf("%s/GetData error unmarshal data: %s", storagePrefixLog, err)
-		return err
-	}
-	return nil
-}
-
-func (s *storage) UpdateData(ctx context.Context, id int64, key string, value interface{}) error {
-	data, err := s._getData(ctx, id)
+	b, err := json.Marshal(v)
 	if err != nil {
-		return err
-	}
-	b, err := json.Marshal(value)
-	if err != nil {
-		log.Errorf("%s/UpdateData error marshal data: %s", storagePrefixLog, err)
 		return err
 	}
 	data[key] = b
-	return s._setData(ctx, id, data)
+	return s.__setData(id, data, 0)
 }
 
-func (s *storage) Clear(ctx context.Context, id int64) error {
-	if err := s.Del(ctx, stateKey(id)).Err(); err != nil {
-		log.Errorf("%s/Clear error clear state: %s", storagePrefixLog, err)
+func (s *redisStorage) setTempData(id int64, key string, v any, d time.Duration) error {
+	data, err := s.__getData(id)
+	if err != nil {
 		return err
 	}
-	if err := s.Del(ctx, dataKey(id)).Err(); err != nil {
-		log.Errorf("%s/Clear error clear data: %s", storagePrefixLog, err)
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	data[key] = b
+	return s.__setData(id, data, d)
+}
+
+func (s *redisStorage) getData(id int64, key string, v any) error {
+	data, err := s.__getData(id)
+	if err != nil {
+		return err
+	}
+	b, ok := data[key]
+	if !ok {
+		return ErrKeyNotExists
+	}
+	if err = json.Unmarshal(b, v); err != nil {
 		return err
 	}
 	return nil
 }
 
-func stateKey(id int64) string {
+func (s *redisStorage) clear(id int64) error {
+	if err := s.Del(s.ctx, s.stateKey(id)).Err(); err != nil {
+		return err
+	}
+	if err := s.Del(s.ctx, s.dataKey(id)).Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *redisStorage) stateKey(id int64) string {
 	return fmt.Sprintf(defaultStateKey, id)
 }
 
-func dataKey(id int64) string {
+func (s *redisStorage) dataKey(id int64) string {
 	return fmt.Sprintf(defaultDataKey, id)
 }

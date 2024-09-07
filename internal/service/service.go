@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bot_for_modeus/internal/model/dbmodel"
 	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/internal/repo"
 	"bot_for_modeus/pkg/crypter"
@@ -17,16 +16,35 @@ type (
 		ScheduleId string
 		GradesId   string
 	}
-	User interface {
-		CreateUser(ctx context.Context, input UserInput) error
-		FindUser(ctx context.Context, userId int64) (dbmodel.User, error)
-		UpdateLoginPassword(ctx context.Context, userId int64, login, password string) error
-		UpdateUserInformation(ctx context.Context, input UserInput) error
-		AddFriend(ctx context.Context, userId int64, fullName, scheduleId string) error
-		DeleteFriend(ctx context.Context, userId int64, scheduleId string) error
-		DeleteUser(ctx context.Context, userId int64) error
+	UserOutput struct {
+		FullName   string
+		Login      string
+		Password   string
+		ScheduleId string
+		GradesId   string
+		Friends    map[string]string
+	}
+	UserLoginPasswordInput struct {
+		UserId   int64
+		Login    string
+		Password string
+	}
+	FriendInput struct {
+		UserId     int64
+		FullName   string
+		ScheduleId string
 	}
 )
+
+type User interface {
+	Create(ctx context.Context, input UserInput) error
+	Find(ctx context.Context, userId int64) (UserOutput, error)
+	UpdateLoginPassword(ctx context.Context, input UserLoginPasswordInput) error
+	UpdateInfo(ctx context.Context, input UserInput) error
+	Delete(ctx context.Context, userId int64) error
+	AddFriend(ctx context.Context, input FriendInput) error
+	DeleteFriend(ctx context.Context, input FriendInput) error
+}
 
 type (
 	Services struct {
@@ -35,15 +53,15 @@ type (
 	}
 	ServicesDependencies struct {
 		Repos     *repo.Repositories
+		Crypter   crypter.Crypter
 		Parser    modeus.Parser
-		Redis     redis.Pool
-		Crypter   crypter.PasswordCrypter
+		Redis     redis.Redis
 		RootLogin string
 		RootPass  string
 	}
 )
 
-func NewServices(d ServicesDependencies) *Services {
+func NewServices(d *ServicesDependencies) *Services {
 	return &Services{
 		User:   newUserService(d.Repos, d.Crypter),
 		Parser: parser.NewParserService(d.Repos.User, d.Parser, d.Redis, d.RootLogin, d.RootPass),

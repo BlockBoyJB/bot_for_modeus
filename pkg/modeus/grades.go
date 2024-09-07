@@ -2,6 +2,7 @@ package modeus
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 )
@@ -11,6 +12,7 @@ const (
 	studentRatingsUri       = "/students-app/api/pages/student-card/my/ratings"
 	courseUnitsUri          = "/students-app/api/pages/student-card/my/academic-period-results-table/primary"
 	coursersTotalResultsUri = "/students-app/api/pages/student-card/my/academic-period-results-table/secondary"
+	eventResultsUri         = "/schedule-calendar-v2/api/calendar/events/%s/results/search"
 )
 
 type Lesson struct {
@@ -37,7 +39,7 @@ type CourseUnit struct {
 		CycleRealizationId string `json:"cycleRealizationId"`
 	} `json:"trainingTeams"`
 	LearningPathElementActive bool `json:"learningPathElementActive"`
-	MidCheckModule            bool `json:"midCheckModule"`
+	MidCheckModule            bool `json:"midCheckModule"` // TODO если false, то предмет не оцениваемый?
 }
 
 type PrimaryGradesResponse struct {
@@ -79,6 +81,17 @@ type ResultFinal struct {
 	UpdatedBy               string `json:"updatedBy"`
 }
 
+type EventPersonAttendance struct { // Отметки посещения за пару
+	ResultId                    string      `json:"resultId"`
+	EventId                     string      `json:"eventId"`
+	LessonId                    interface{} `json:"lessonId"`
+	LessonRealizationTemplateId string      `json:"lessonRealizationTemplateId"`
+	CreatedTs                   string      `json:"createdTs"`
+	CreatedBy                   string      `json:"createdBy"`
+	UpdatedTs                   string      `json:"updatedTs"`
+	UpdatedBy                   string      `json:"updatedBy"`
+}
+
 type SecondaryGradesResponse struct {
 	Errors                               []interface{} `json:"errors"`
 	CourseUnitRealizationAttendanceRates []struct {
@@ -87,17 +100,8 @@ type SecondaryGradesResponse struct {
 		AbsentRate              float64 `json:"absentRate"`
 		UndefinedRate           float64 `json:"undefinedRate"`
 	} `json:"courseUnitRealizationAttendanceRates"`
-	EventPersonAttendances []struct {
-		ResultId                    string      `json:"resultId"`
-		EventId                     string      `json:"eventId"`
-		LessonId                    interface{} `json:"lessonId"`
-		LessonRealizationTemplateId string      `json:"lessonRealizationTemplateId"`
-		CreatedTs                   string      `json:"createdTs"`
-		CreatedBy                   string      `json:"createdBy"`
-		UpdatedTs                   string      `json:"updatedTs"`
-		UpdatedBy                   string      `json:"updatedBy"`
-	} `json:"eventPersonAttendances"`
-	AcademicCourseControlObjects []struct { // Это баллы "папки"
+	EventPersonAttendances       []EventPersonAttendance `json:"eventPersonAttendances"`
+	AcademicCourseControlObjects []struct {              // Это баллы "папки"
 		AcademicCourseId string `json:"academicCourseId"`
 		Value            string `json:"value"`
 	} `json:"academicCourseControlObjects"`
@@ -120,15 +124,23 @@ type SecondaryGradesResponse struct {
 		OrderIndex           int         `json:"orderIndex"`
 		LessonId             string      `json:"lessonId"`
 		MainGradingScaleCode string      `json:"mainGradingScaleCode"`
-		Result               interface{} `json:"result"`
-		ResultRequired       interface{} `json:"resultRequired"`
+		Result               struct {
+			Id              string `json:"id"`
+			ControlObjectId string `json:"controlObjectId"`
+			ResultValue     string `json:"resultValue"` // оценка за отдельную пару
+			CreatedTs       string `json:"createdTs"`
+			CreatedBy       string `json:"createdBy"`
+			UpdatedTs       string `json:"updatedTs"`
+			UpdatedBy       string `json:"updatedBy"`
+		} `json:"result"`
+		ResultRequired bool `json:"resultRequired"`
 	} `json:"lessonControlObjects"`
 }
 
 type SecondaryGradesRequest struct {
 	CourseUnitRealizationId []string `json:"courseUnitRealizationId"` // тут указываем CourseUnit.Id
 	AcademicCourseId        []string `json:"academicCourseId"`        // TODO поэкспериментировать
-	LessonId                []string `json:"lessonId"`                // TODO поэкспериментировать
+	LessonId                []string `json:"lessonId"`                // Для детального просмотра оценок (посещаемость + баллы за каждую пару)
 	PersonId                string   `json:"personId"`
 	AprId                   string   `json:"aprId"`
 	AcademicPeriodStartDate string   `json:"academicPeriodStartDate"`
@@ -181,7 +193,8 @@ type RatingsResponse struct {
 	Errors []interface{} `json:"errors"`
 }
 
-func (s *Modeus) FindAPR(token, gradesId string) ([]APRealization, error) {
+// FindAPR находит все прошедшие семестры + текущий
+func (s *modeus) FindAPR(token, gradesId string) ([]APRealization, error) {
 	type request struct {
 		StudentId string `json:"studentId"`
 	}
@@ -204,7 +217,7 @@ func (s *Modeus) FindAPR(token, gradesId string) ([]APRealization, error) {
 	return response, nil
 }
 
-func (s *Modeus) FindCurrentAPR(token, gradesId string) (APRealization, error) {
+func (s *modeus) FindCurrentAPR(token, gradesId string) (APRealization, error) {
 	response, err := s.FindAPR(token, gradesId)
 	if err != nil {
 		return APRealization{}, err
@@ -220,7 +233,7 @@ func (s *Modeus) FindCurrentAPR(token, gradesId string) (APRealization, error) {
 	return response[ind], nil
 }
 
-func (s *Modeus) StudentRatings(token string, input RatingsRequest) (RatingsResponse, error) {
+func (s *modeus) StudentRatings(token string, input RatingsRequest) (RatingsResponse, error) {
 	resp, err := s.makeRequest(token, http.MethodPost, studentRatingsUri, input)
 	if err != nil {
 		return RatingsResponse{}, err
@@ -240,7 +253,8 @@ func (s *Modeus) StudentRatings(token string, input RatingsRequest) (RatingsResp
 
 // TODO При детальном просмотре предмета обратить внимание на пары, в которых может быть несколько полей для оценок
 
-func (s *Modeus) CourseUnits(token string, input PrimaryGradesRequest) ([]CourseUnit, error) {
+// CourseUnits возвращает PrimaryGradesResponse.CourseUnitRealizations (id, название предмета + все запланированные встречи). На вход нужна информация о семестре и schedule + grades id пользователя (
+func (s *modeus) CourseUnits(token string, input PrimaryGradesRequest) ([]CourseUnit, error) {
 	resp, err := s.makeRequest(token, http.MethodPost, courseUnitsUri, input)
 	if err != nil {
 		return nil, err
@@ -260,7 +274,9 @@ func (s *Modeus) CourseUnits(token string, input PrimaryGradesRequest) ([]Course
 	return response.CourseUnitRealizations, nil
 }
 
-func (s *Modeus) CoursesTotalResults(token string, input SecondaryGradesRequest) (SecondaryGradesResponse, error) {
+// CoursesTotalResults возвращает информацию о посещаемости (по id предметов), текущий итог баллов + итог семестра (если есть), оценки за встречи.
+// На вход надо указать id всех предметов, id всех встреч (для детальной информации баллов по встречам), информацию о текущем семестре
+func (s *modeus) CoursesTotalResults(token string, input SecondaryGradesRequest) (SecondaryGradesResponse, error) {
 	resp, err := s.makeRequest(token, http.MethodPost, coursersTotalResultsUri, input)
 	if err != nil {
 		return SecondaryGradesResponse{}, err
@@ -274,6 +290,70 @@ func (s *Modeus) CoursesTotalResults(token string, input SecondaryGradesRequest)
 
 	if err = json.Unmarshal(body, &response); err != nil {
 		return SecondaryGradesResponse{}, err
+	}
+	return response, nil
+}
+
+type EventGradesRequest struct {
+	StudentId               []string `json:"studentId"`
+	EventTypeId             string   `json:"eventTypeId"` // Тот же, что и в ScheduleResponse.Embedded.Events[i].TypeId
+	LessonId                string   `json:"lessonId"`
+	LessonTemplateId        string   `json:"lessonTemplateId"`
+	CourseUnitRealizationId string   `json:"courseUnitRealizationId"`
+}
+
+type Attendance struct {
+	ResultId           string      `json:"resultId"`
+	UpdatedByPersonId  string      `json:"updatedByPersonId"`
+	UpdatedByFullName  string      `json:"updatedByFullName"`
+	UpdatedByShortName interface{} `json:"updatedByShortName"`
+	UpdatedByTs        string      `json:"updatedByTs"`
+}
+
+type Result struct {
+	Id                 string      `json:"id"`
+	Value              string      `json:"value"`
+	Required           bool        `json:"required"`
+	ControlObjectId    string      `json:"controlObjectId"`
+	Name               string      `json:"name"`
+	UpdatedByPersonId  string      `json:"updatedByPersonId"`
+	UpdatedByFullName  string      `json:"updatedByFullName"`
+	UpdatedByShortName interface{} `json:"updatedByShortName"`
+	UpdatedByTs        string      `json:"updatedByTs"`
+}
+
+type EventGradesResponse struct {
+	Embedded struct {
+		AttendanceResult []Attendance `json:"attendance-result"`
+		Results          []Result     `json:"results"`
+		//MidCheckResults []struct {
+		//	Id                 string      `json:"id"`
+		//	Value              string      `json:"value"`
+		//	Required           interface{} `json:"required"`
+		//	ControlObjectId    interface{} `json:"controlObjectId"`
+		//	Name               string      `json:"name"`
+		//	UpdatedByPersonId  string      `json:"updatedByPersonId"`
+		//	UpdatedByFullName  string      `json:"updatedByFullName"`
+		//	UpdatedByShortName interface{} `json:"updatedByShortName"`
+		//	UpdatedByTs        string      `json:"updatedByTs"`
+		//} `json:"mid-check-results"`
+	} `json:"_embedded"`
+}
+
+func (s *modeus) EventGrades(token, eventId string, input EventGradesRequest) (EventGradesResponse, error) {
+	resp, err := s.makeRequest(token, http.MethodPost, fmt.Sprintf(eventResultsUri, eventId), input)
+	if err != nil {
+		return EventGradesResponse{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return EventGradesResponse{}, err
+	}
+	var response EventGradesResponse
+
+	if err = json.Unmarshal(body, &response); err != nil {
+		return EventGradesResponse{}, err
 	}
 	return response, nil
 }

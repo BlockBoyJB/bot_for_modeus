@@ -9,7 +9,7 @@ import (
 
 const defaultDisconnectTimeout = time.Second * 5
 
-type mongoPool interface {
+type Pool interface {
 	InsertOne(ctx context.Context, document interface{}, opts ...*options.InsertOneOptions) (*mongo.InsertOneResult, error)
 	FindOne(ctx context.Context, filter interface{}, opts ...*options.FindOneOptions) *mongo.SingleResult
 	//Find(ctx context.Context, filter interface{}, opts ...*options.FindOptions) (cur *mongo.Cursor, err error)
@@ -19,21 +19,18 @@ type mongoPool interface {
 }
 
 type Mongo struct {
-	Pool   mongoPool
-	client *mongo.Client
+	client   *mongo.Client
+	database *mongo.Database
 }
 
-// Пока что черновой вариант взаимодействия с бд. Да и да текущем этапе используется только одна коллекция
-
-func NewMongo(ctx context.Context, url, database, collection string) (*Mongo, error) {
-	o := options.Client().ApplyURI(url)
-	client, err := mongo.Connect(ctx, o)
+func NewMongo(ctx context.Context, uri, database string) (*Mongo, error) {
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
 		return nil, err
 	}
 	return &Mongo{
-		Pool:   client.Database(database).Collection(collection),
-		client: client,
+		client:   client,
+		database: client.Database(database),
 	}, nil
 }
 
@@ -41,4 +38,12 @@ func (m *Mongo) Disconnect() {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultDisconnectTimeout)
 	defer cancel()
 	_ = m.client.Disconnect(ctx)
+}
+
+func (m *Mongo) Drop(ctx context.Context) error {
+	return m.database.Drop(ctx)
+}
+
+func (m *Mongo) Collection(name string) Pool {
+	return m.database.Collection(name)
 }
