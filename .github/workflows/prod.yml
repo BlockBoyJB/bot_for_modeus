@@ -30,6 +30,7 @@ jobs:
         run: docker stop $(echo TEST_CONTAINER_NAME)
 
   build_and_push:
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - name: set up QEMU
