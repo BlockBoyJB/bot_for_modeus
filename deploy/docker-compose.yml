@@ -17,7 +17,7 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - dbdata:/data/db
+      - ./dbdata:/data/db
     healthcheck:
       test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
       interval: 5s
