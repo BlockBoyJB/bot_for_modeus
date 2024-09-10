@@ -7,7 +7,10 @@ import (
 	"time"
 )
 
-const defaultModeusUrl = "https://utmn.modeus.org"
+const (
+	defaultModeusUrl     = "https://utmn.modeus.org"
+	defaultModeusTimeout = time.Second * 30
+)
 
 type Parser interface {
 	modeusClient
@@ -40,7 +43,9 @@ type modeus struct {
 func NewModeus(selenium *Selenium) Parser {
 	return &modeus{
 		Selenium: selenium,
-		client:   http.DefaultClient,
+		client: &http.Client{
+			Timeout: defaultModeusTimeout,
+		},
 	}
 }
 
@@ -53,9 +58,12 @@ func (s *modeus) makeRequest(token, method, uri string, v any) (*http.Response, 
 	if err != nil {
 		return nil, err
 	}
-	// TODO проверять, что статус == 200
 	r.Header.Set("Authorization", "Bearer "+token)
 	r.Header.Set("Content-Type", "application/json")
 
-	return s.client.Do(r)
+	resp, err := s.client.Do(r)
+	if err != nil || resp.StatusCode > 300 {
+		return nil, ErrModeusUnavailable
+	}
+	return resp, nil
 }

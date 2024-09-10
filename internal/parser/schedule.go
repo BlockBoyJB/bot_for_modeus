@@ -3,6 +3,7 @@ package parser
 import (
 	"bot_for_modeus/pkg/modeus"
 	"context"
+	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"time"
@@ -66,6 +67,9 @@ func (p *parser) parseSchedule(ctx context.Context, input modeus.ScheduleRequest
 	}
 	schedule, err := p.modeus.Schedule(token, input)
 	if err != nil {
+		if errors.Is(err, modeus.ErrModeusUnavailable) {
+			return nil, ErrModeusUnavailable
+		}
 		log.Errorf("%s/parseSchedule error find user schedule from modeus: %s", parserServicePrefixLog, err)
 		return nil, err
 	}

@@ -1,7 +1,10 @@
 package v2
 
 import (
+	"bot_for_modeus/internal/model/tgmodel"
+	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/pkg/bot"
+	"errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -19,6 +22,9 @@ func loggingMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
 func errorMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
 	return func(c bot.Context) error {
 		if err := next(c); err != nil {
+			if errors.Is(err, parser.ErrModeusUnavailable) {
+				return c.SendMessageWithInlineKB(txtModeusUnavailable, tgmodel.ScheduleLink)
+			}
 			return c.SendMessage(txtError)
 		}
 		return nil

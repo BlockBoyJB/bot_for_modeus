@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+var ScheduleLink = [][]tgbotapi.InlineKeyboardButton{{tgbotapi.NewInlineKeyboardButtonURL("Посмотреть на сайте", "https://utmn.modeus.org")}}
+
 func DayScheduleButtons(now time.Time) [][]tgbotapi.InlineKeyboardButton {
 	return dayButtons(now, "day")
 }
