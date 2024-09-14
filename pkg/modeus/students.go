@@ -36,10 +36,20 @@ type Student struct {
 	LearningEndDate   interface{} `json:"learningEndDate"`   // Конец обучения, может приходить null
 }
 
+type Employee struct {
+	Id        string `json:"id"`
+	PersonId  string `json:"personId"`
+	GroupId   string `json:"groupId"`
+	GroupName string `json:"groupName"`
+	DateIn    string `json:"dateIn"`  // Дата в формате time.DateOnly
+	DateOut   string `json:"dateOut"` // Дата в формате time.DateOnly
+}
+
 type StudentResponse struct {
 	Embedded struct {
-		Persons  []Person  `json:"persons"`
-		Students []Student `json:"students"`
+		Persons   []Person   `json:"persons"`
+		Students  []Student  `json:"students"`
+		Employees []Employee `json:"employees"`
 	} `json:"_embedded"`
 	Page struct {
 		Size          int `json:"size"`

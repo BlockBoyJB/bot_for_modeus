@@ -35,24 +35,48 @@ func (p *parser) FindStudents(ctx context.Context, fullName string) ([]Student, 
 	}
 
 	var result []Student
-	for _, s := range response.Embedded.Students {
+	for _, person := range response.Embedded.Persons {
 		student := Student{
-			FullName:         "Ошибка", // Ставим ошибку по дефолту, потому что ФИО содержится в response.Embedded.Persons
-			FlowCode:         s.FlowCode,
-			SpecialtyName:    s.SpecialtyName,
-			SpecialtyProfile: s.SpecialtyProfile,
-			ScheduleId:       s.PersonId,
-			GradesId:         s.Id,
+			FullName: person.FullName,
 		}
-		// Идем доп циклом потому что порядок в persons и students иногда не совпадает.
-		// Да, получается O(n^2), но у нас лимит на поиск пользователей маленький (максимум 10)
-		for _, person := range response.Embedded.Persons {
-			if person.Id == s.PersonId {
-				student.FullName = person.FullName
+		var ok bool
+
+		for _, s := range response.Embedded.Students {
+			if s.PersonId == person.Id {
+				student = Student{
+					FullName:         student.FullName,
+					FlowCode:         s.FlowCode,
+					SpecialtyName:    s.SpecialtyName,
+					SpecialtyProfile: s.SpecialtyProfile,
+					ScheduleId:       s.PersonId,
+					GradesId:         s.Id,
+				}
+				ok = true
 				break
 			}
 		}
-		result = append(result, student)
+		if !ok {
+			// Есть такой вариант, что пользователь ввел ФИО преподавателя,
+			// а его данные находятся в другом списке в ответе
+			for _, e := range response.Embedded.Employees {
+				// Проверка на DateOut == "" нужна, потому что в ответе приходят разные занимаемые должности в рамках одного преподавателя.
+				// Т.е есть разные периоды работы, в которых разный GroupName. Нам нужен тот, который не закончился
+				if e.PersonId == person.Id && e.DateOut == "" {
+					student = Student{
+						FullName:         student.FullName,
+						SpecialtyName:    "Преподаватель", // Вообще-то, не совсем понятно, что это преподаватель (в ответе массив называется "сотрудники").
+						SpecialtyProfile: e.GroupName,
+						ScheduleId:       e.PersonId,
+						GradesId:         e.Id,
+					}
+					ok = true
+					break
+				}
+			}
+		}
+		if ok {
+			result = append(result, student)
+		}
 	}
 	return result, nil
 }
