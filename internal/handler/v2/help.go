@@ -18,6 +18,7 @@ func newHelpRouter(b *bot.Bot) {
 	r := &helpRouter{}
 
 	b.Command("/help", r.cmdHelp)
+	b.Message(tgmodel.HelpButton, r.cmdHelp)
 	b.Callback("/help_back", r.callbackHelpBack)
 	b.Callback("/help_schedule", r.callbackSchedule)
 	b.Callback("/help_grades", r.callbackGrades)

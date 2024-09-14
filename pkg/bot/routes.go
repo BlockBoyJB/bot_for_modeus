@@ -1,33 +1,46 @@
 package bot
 
+// Типы входящих сообщений. Можно было сделать их публичными и передавать в одну функцию обработчик в качестве аргумента, но не хочу =)
+const (
+	onCommand = iota
+	onMessage
+	onCallback
+	onState
+)
+
 type HandlerFunc func(c Context) error
 
 type MiddlewareFunc func(next HandlerFunc) HandlerFunc
 
-type router struct {
-	command  map[string]HandlerFunc
-	callback map[string]HandlerFunc
-	state    map[string]HandlerFunc
-}
+type (
+	// алиасы для удобства
+	route  = map[string]HandlerFunc
+	router = map[int]route
+)
 
-func newRouter() *router {
-	return &router{
-		command:  make(map[string]HandlerFunc),
-		callback: make(map[string]HandlerFunc),
-		state:    make(map[string]HandlerFunc),
+func newRouter() router {
+	return router{
+		onCommand:  route{},
+		onMessage:  route{},
+		onCallback: route{},
+		onState:    route{},
 	}
 }
 
 func (b *Bot) Command(name string, h HandlerFunc) {
-	b.routers.command[name] = h
+	b.routers[onCommand][name] = h
+}
+
+func (b *Bot) Message(name string, h HandlerFunc) {
+	b.routers[onMessage][name] = h
 }
 
 func (b *Bot) Callback(name string, h HandlerFunc) {
-	b.routers.callback[name] = h
+	b.routers[onCallback][name] = h
 }
 
 func (b *Bot) State(name string, h HandlerFunc) {
-	b.routers.state[name] = h
+	b.routers[onState][name] = h
 }
 
 func (b *Bot) Use(middleware ...MiddlewareFunc) {

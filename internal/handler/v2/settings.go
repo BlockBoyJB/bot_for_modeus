@@ -25,6 +25,7 @@ func newSettingsRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 	}
 
 	b.Command("/settings", r.cmdSettings)
+	b.Message(tgmodel.SettingsButton, r.cmdSettings)
 	b.Callback("/cmd_settings_callback", r.callbackSettingsBack)
 	b.Callback("/add_login_password", r.callbackAddLoginPassword)
 	b.State(stateAddLoginPassword, r.stateAddLoginPassword)

@@ -23,7 +23,7 @@ type Bot struct {
 	wg         *sync.WaitGroup
 	ctx        context.Context
 	parseMode  string
-	routers    *router
+	routers    router
 	middleware []MiddlewareFunc
 	storage    storage
 	logger     Logger
@@ -116,13 +116,17 @@ func (b *Bot) handle(u tgbotapi.Update) (HandlerFunc, bool) {
 
 	if u.Message != nil {
 		if u.Message.IsCommand() {
-			f, ok := b.routers.command[u.Message.Text]
+			f, ok := b.routers[onCommand][u.Message.Text]
+			return f, ok
+		}
+		// Может быть нажатие с обычной клавиатуры
+		if f, ok := b.routers[onMessage][u.Message.Text]; ok {
 			return f, ok
 		}
 		userId = u.Message.From.ID
 	}
 	if u.CallbackQuery != nil {
-		f, ok := b.routers.callback[u.CallbackQuery.Data]
+		f, ok := b.routers[onCallback][u.CallbackQuery.Data]
 		if ok {
 			return f, true
 		}
@@ -132,7 +136,7 @@ func (b *Bot) handle(u tgbotapi.Update) (HandlerFunc, bool) {
 	// либо в инлайн кнопке на коллбэк есть какое-то значение, которое надо обработать отдельно от ручки коллбэков.
 	// Соответственно, при таких вариантах это какое-то состояние пользователя
 	state, _ := b.storage.getState(userId)
-	f, ok := b.routers.state[state]
+	f, ok := b.routers[onState][state]
 	return f, ok
 }
 

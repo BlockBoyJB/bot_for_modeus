@@ -22,6 +22,7 @@ func newFriendsRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 	}
 
 	b.Command("/friends", r.cmdFriends)
+	b.Message(tgmodel.FriendsButton, r.cmdFriends)
 	b.Callback("/choose_friend_back", r.callbackChooseFriendBack)
 	b.State(stateChooseFriend, r.stateChooseFriend)
 	b.Callback("/choose_friend_action_back", r.callbackChooseFriendActionBack)

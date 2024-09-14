@@ -18,6 +18,7 @@ func newStudentRouter(b *bot.Bot, parser parser.Parser) {
 	}
 
 	b.Command("/other_student", r.cmdOtherStudent)
+	b.Message(tgmodel.OtherStudentButton, r.cmdOtherStudent)
 	b.Callback("/other_student_back", r.callbackOtherStudentBack)
 	b.State(stateInputOtherStudent, r.stateInputOtherStudent)
 	b.Callback("/choose_other_student_back", r.callbackChooseOtherStudentBack)

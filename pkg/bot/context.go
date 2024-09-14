@@ -16,6 +16,7 @@ type Context interface {
 
 	SendMessage(text string) error
 	SendMessageWithInlineKB(text string, kb [][]tgbotapi.InlineKeyboardButton) error
+	SendMessageWithReplyKB(text string, kb [][]tgbotapi.KeyboardButton) error
 	EditMessage(text string) error
 	EditMessageWithInlineKB(text string, kb [][]tgbotapi.InlineKeyboardButton) error
 	DeleteInlineKB() error
@@ -81,6 +82,13 @@ func (c *nativeContext) SendMessageWithInlineKB(text string, kb [][]tgbotapi.Inl
 	msg := tgbotapi.NewMessage(c.UserId(), text)
 	msg.ParseMode = c.bot.parseMode
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(kb...)
+	return c.sendMessage(msg)
+}
+
+func (c *nativeContext) SendMessageWithReplyKB(text string, kb [][]tgbotapi.KeyboardButton) error {
+	msg := tgbotapi.NewMessage(c.UserId(), text)
+	msg.ParseMode = c.bot.parseMode
+	msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(kb...)
 	return c.sendMessage(msg)
 }
 

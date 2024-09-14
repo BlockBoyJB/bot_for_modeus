@@ -27,7 +27,9 @@ func newUserRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 	b.State(stateActionAfterCreate, r.stateActionAfterCreate)
 	b.Command("/stop", r.cmdStop)
 	b.State(stateConfirmDelete, r.stateConfirmDelete)
+
 	b.Command("/me", r.cmdMe)
+	b.Message(tgmodel.MeButton, r.cmdMe)
 	b.Callback("/me_back", r.callbackMeBack)
 	b.Callback("/about_me", r.callbackAboutMe)
 	b.Callback("/ratings", r.callbackRatings)
@@ -38,7 +40,7 @@ func (r *userRouter) cmdStart(c bot.Context) error {
 	if err := c.SetState(stateInputFullName); err != nil {
 		return err
 	}
-	return c.SendMessage(txtStart)
+	return c.SendMessageWithReplyKB(txtStart, tgmodel.RowCommands)
 }
 
 func (r *userRouter) callbackStartBack(c bot.Context) error {

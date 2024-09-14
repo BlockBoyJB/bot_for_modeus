@@ -124,6 +124,36 @@ var UICommands = []tgbotapi.BotCommand{
 	{Command: "stop", Description: "Остановить бота"},
 }
 
+const (
+	DayScheduleButton  = "📙 Расписание на день"
+	WeekScheduleButton = "📚 Расписание на неделю"
+	GradesButton       = "📊 Оценки"
+	FriendsButton      = "👨‍🎓👩‍🎓 Друзья"
+	OtherStudentButton = "👥 Другие студенты"
+	MeButton           = "\U0001FAF5 Обо мне"
+	SettingsButton     = "⚙️ Настройки"
+	HelpButton         = "❓ Помощь"
+)
+
+var RowCommands = [][]tgbotapi.KeyboardButton{
+	{
+		tgbotapi.NewKeyboardButton(DayScheduleButton),
+		tgbotapi.NewKeyboardButton(WeekScheduleButton),
+	},
+	{
+		tgbotapi.NewKeyboardButton(GradesButton),
+		tgbotapi.NewKeyboardButton(FriendsButton),
+	},
+	{
+		tgbotapi.NewKeyboardButton(OtherStudentButton),
+		tgbotapi.NewKeyboardButton(MeButton),
+	},
+	{
+		tgbotapi.NewKeyboardButton(SettingsButton),
+		tgbotapi.NewKeyboardButton(HelpButton),
+	},
+}
+
 func formatNumber(k int) string {
 	if k < 10 {
 		return nums[k]

@@ -39,9 +39,13 @@ func newScheduleRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 	}
 
 	b.Command("/day_schedule", r.cmdDaySchedule)
+	b.Message(tgmodel.DayScheduleButton, r.cmdDaySchedule)
 	b.Command("/week_schedule", r.cmdWeekSchedule)
+	b.Message(tgmodel.WeekScheduleButton, r.cmdWeekSchedule)
 	b.State(stateUserSchedule, r.stateUserSchedule)
+
 	b.Command("/grades", r.cmdGrades)
+	b.Message(tgmodel.GradesButton, r.cmdGrades)
 	b.Callback("/semester_grades_back", r.callbackSemesterGradesBack)
 	b.Callback("/change_semester", r.callbackChangeSemester)
 	b.State(stateChooseSemester, r.stateChooseSemester)
