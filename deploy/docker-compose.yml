@@ -4,8 +4,13 @@ services:
   bot:
     container_name: bot
     image: ${BOT_REGISTRY}/${BOT_IMAGE}:${BOT_TAG}
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_started
     volumes:
       - ./logs:/logs
+      - ${MONGO_CERTS}:/certs/mongodb
     env_file:
       - .env
     networks:
@@ -18,11 +23,9 @@ services:
       - "27017:27017"
     volumes:
       - ./dbdata:/data/db
-    healthcheck:
-      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - ./mongod.conf:/etc/mongod.conf
+      - ${MONGO_CERTS}:/etc/ssl/mongo
+    command: --config /etc/mongod.conf
     env_file:
       - .env
     networks:
@@ -49,6 +52,9 @@ services:
     container_name: bot-nginx
     image: nginx:alpine
     restart: always
+    depends_on:
+      bot:
+        condition: service_started
     ports:
       - "443:443"
     volumes:
