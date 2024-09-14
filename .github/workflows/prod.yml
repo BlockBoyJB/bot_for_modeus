@@ -75,7 +75,7 @@ jobs:
           password: ${{ secrets.PASSWORD }}
           script: |
             cd ${{ secrets.WORKDIR }}
-            docker-compose stop
+            docker-compose stop bot nginx
             docker-compose rm -f bot
             docker-compose pull -q
             docker-compose up -d --force-recreate nginx
