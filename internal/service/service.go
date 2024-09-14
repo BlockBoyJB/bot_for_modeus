@@ -63,7 +63,7 @@ type (
 
 func NewServices(d *ServicesDependencies) *Services {
 	return &Services{
-		User:   newUserService(d.Repos, d.Crypter),
-		Parser: parser.NewParserService(d.Repos.User, d.Parser, d.Redis, d.RootLogin, d.RootPass),
+		User:   newUserService(d.Repos.User, d.Crypter),
+		Parser: parser.NewParserService(d.Parser, d.Redis, d.RootLogin, d.RootPass),
 	}
 }

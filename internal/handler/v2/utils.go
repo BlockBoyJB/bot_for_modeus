@@ -109,6 +109,11 @@ func studentSchedule(c bot.Context, p parser.Parser, backKB [][]tgbotapi.InlineK
 	if err = c.GetData("schedule_id", &scheduleId); err != nil {
 		return err
 	}
+	var fullName string
+	if err = c.GetData("full_name", &fullName); err != nil {
+		return err
+	}
+
 	var (
 		text string
 		kb   [][]tgbotapi.InlineKeyboardButton
@@ -125,8 +130,9 @@ func studentSchedule(c bot.Context, p parser.Parser, backKB [][]tgbotapi.InlineK
 			return err
 		}
 	default:
-		return errors.New("unexpected error")
+		return errors.New("studentSchedule unexpected error")
 	}
+	text = fmt.Sprintf(formatFullName, fullName) + text
 	if backKB != nil {
 		kb = append(kb, backKB...)
 	}

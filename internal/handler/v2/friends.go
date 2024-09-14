@@ -72,9 +72,22 @@ func (r *friendsRouter) callbackChooseFriendBack(c bot.Context) error {
 }
 
 func (r *friendsRouter) stateChooseFriend(c bot.Context) error {
+	var friends map[string]string
+	if err := c.GetData("friends", &friends); err != nil {
+		return err
+	}
+	fullName, ok := friends[c.Text()]
+	if !ok { // Париться с проверкой, что это коллбэк нет смысла. Если захочет ввести свой id сам, пусть делает. Главное чтобы гадости не писали)
+		return c.SendMessage(txtWarn)
+	}
+
 	if err := c.SetData("schedule_id", c.Text()); err != nil {
 		return err
 	}
+	if err := c.SetData("full_name", fullName); err != nil {
+		return err
+	}
+
 	if err := c.EditMessageWithInlineKB(txtChooseFriendAction, tgmodel.ChooseFriendAction); err != nil {
 		return err
 	}
@@ -94,6 +107,11 @@ func (r *friendsRouter) stateChooseFriendAction(c bot.Context) error {
 	if err != nil {
 		return err
 	}
+	var fullName string
+	if err = c.GetData("full_name", &fullName); err != nil {
+		return err
+	}
+
 	if c.Text() == "delete_friend" {
 		if err = r.user.DeleteFriend(c.Context(), service.FriendInput{
 			UserId:     c.UserId(),
@@ -101,7 +119,7 @@ func (r *friendsRouter) stateChooseFriendAction(c bot.Context) error {
 		}); err != nil {
 			return err
 		}
-		if err = c.EditMessage("Друг успешно удален\n" + txtDefault); err != nil {
+		if err = c.EditMessage(fmt.Sprintf("Друг (%s) успешно удален\n"+txtDefault, fullName)); err != nil {
 			return err
 		}
 		return c.Clear()
@@ -111,6 +129,7 @@ func (r *friendsRouter) stateChooseFriendAction(c bot.Context) error {
 	if err != nil {
 		return err
 	}
+	text = fmt.Sprintf(formatFullName, fullName) + text
 	kb = append(kb, tgmodel.BackButton("/choose_friend_action_back")...)
 	if err = c.EditMessageWithInlineKB(text, kb); err != nil {
 		return err
@@ -178,6 +197,10 @@ func (r *friendsRouter) stateChooseFindFriend(c bot.Context) error {
 	if err = c.SetData("schedule_id", s.ScheduleId); err != nil {
 		return err
 	}
+	if err = c.SetData("full_name", s.FullName); err != nil {
+		return err
+	}
+
 	kb := [][]tgbotapi.InlineKeyboardButton{tgmodel.ChooseFriendAction[0][:2]}
 	if err = c.EditMessageWithInlineKB("Друг успешно сохранен!\n"+txtChooseFriendAction, kb); err != nil {
 		return err

@@ -87,6 +87,9 @@ func (r *studentRouter) stateChooseOtherStudent(c bot.Context) error {
 	if err = c.SetData("schedule_id", s.ScheduleId); err != nil {
 		return err
 	}
+	if err = c.SetData("full_name", s.FullName); err != nil {
+		return err
+	}
 
 	if err = c.EditMessageWithInlineKB(txtChooseOtherStudentAction, tgmodel.OtherStudentButtons); err != nil {
 		return err
@@ -106,11 +109,16 @@ func (r *studentRouter) stateChooseOtherStudentAction(c bot.Context) error {
 	if err := c.GetData("schedule_id", &scheduleId); err != nil {
 		return err
 	}
+	var fullName string
+	if err := c.GetData("full_name", &fullName); err != nil {
+		return err
+	}
 
 	text, kb, err := studentCurrentSchedule(c, r.parser, scheduleId)
 	if err != nil {
 		return err
 	}
+	text = fmt.Sprintf(formatFullName, fullName) + text
 	kb = append(kb, tgmodel.BackButton("/choose_other_student_action_back")...)
 	if err = c.EditMessageWithInlineKB(text, kb); err != nil {
 		return err
