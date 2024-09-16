@@ -9,10 +9,16 @@ import (
 	"errors"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
+	"regexp"
 )
 
 const (
 	userServicePrefixLog = "/service/user"
+)
+
+// Регулярка для первичной проверки корректности почты.
+var (
+	emailRegex = regexp.MustCompile(`^stud\d{10}@study\.utmn\.ru$`)
 )
 
 type userService struct {
@@ -82,6 +88,9 @@ func (s *userService) Find(ctx context.Context, userId int64) (UserOutput, error
 }
 
 func (s *userService) UpdateLoginPassword(ctx context.Context, input UserLoginPasswordInput) error {
+	if !emailRegex.MatchString(input.Login) {
+		return ErrUserIncorrectLogin
+	}
 	password, err := s.crypter.Encrypt(input.Password)
 	if err != nil {
 		log.Errorf("%s/UpdateLoginPassword error encrypt password: %s", userServicePrefixLog, err)

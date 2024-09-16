@@ -60,6 +60,9 @@ func (r *settingsRouter) stateAddLoginPassword(c bot.Context) error {
 		Password: data[1],
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrUserIncorrectLogin) {
+			return c.SendMessage(txtIncorrectLoginPassInput)
+		}
 		if errors.Is(err, service.ErrUserNotFound) {
 			return c.SendMessage(txtUserNotFound)
 		}

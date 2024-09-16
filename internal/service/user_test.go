@@ -269,7 +269,7 @@ func TestUserService_UpdateLoginPassword(t *testing.T) {
 				ctx: context.Background(),
 				input: UserLoginPasswordInput{
 					UserId:   1,
-					Login:    "foobar",
+					Login:    "stud0000000000@study.utmn.ru",
 					Password: "password",
 				},
 			},
@@ -282,12 +282,25 @@ func TestUserService_UpdateLoginPassword(t *testing.T) {
 			expectErr: nil,
 		},
 		{
+			testName: "incorrect login input",
+			args: args{
+				ctx: context.Background(),
+				input: UserLoginPasswordInput{
+					UserId:   1,
+					Login:    "foobar",
+					Password: "password",
+				},
+			},
+			mockBehaviour: func(u *repomocks.MockUser, c *cryptermocks.MockCrypter, a args) {},
+			expectErr:     ErrUserIncorrectLogin,
+		},
+		{
 			testName: "user not exist",
 			args: args{
 				ctx: context.Background(),
 				input: UserLoginPasswordInput{
 					UserId:   123123,
-					Login:    "foobar",
+					Login:    "stud0000000001@study.utmn.ru",
 					Password: "password",
 				},
 			},
@@ -305,7 +318,7 @@ func TestUserService_UpdateLoginPassword(t *testing.T) {
 				ctx: context.Background(),
 				input: UserLoginPasswordInput{
 					UserId:   123123,
-					Login:    "foobar",
+					Login:    "stud0000000000@study.utmn.ru",
 					Password: "password",
 				},
 			},
@@ -323,7 +336,7 @@ func TestUserService_UpdateLoginPassword(t *testing.T) {
 				ctx: context.Background(),
 				input: UserLoginPasswordInput{
 					UserId:   1,
-					Login:    "foobar",
+					Login:    "stud0000000000@study.utmn.ru",
 					Password: "password",
 				},
 			},
