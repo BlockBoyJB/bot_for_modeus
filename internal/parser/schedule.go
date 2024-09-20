@@ -44,6 +44,14 @@ func (p *parser) WeekSchedule(ctx context.Context, scheduleId string, now time.T
 	if err != nil {
 		return nil, err
 	}
+	// Если расписания ни на один день нет, то просто заполняем мапу пустыми значениями.
+	if len(schedule) == 0 {
+		r := make(map[int][]Lesson)
+		for i := 1; i < 7; i++ {
+			r[i] = []Lesson{}
+		}
+		return r, nil
+	}
 	result := make(map[int][]Lesson)
 
 	currDay := 1
