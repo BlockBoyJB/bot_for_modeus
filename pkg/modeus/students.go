@@ -25,15 +25,15 @@ type Person struct {
 }
 
 type Student struct {
-	Id                string      `json:"id"`                // Id для поиска оценок (тут должно быть совпадение с id внутри jwt токена)
-	PersonId          string      `json:"personId"`          // Id для поиска расписания пользователя
-	FlowId            string      `json:"flowId"`            // Id потока
-	FlowCode          string      `json:"flowCode"`          // Название потока (например 2023, Бакалавриат, Специалитет, Очная форма)
-	SpecialtyCode     string      `json:"specialtyCode"`     // Код специальности
-	SpecialtyName     string      `json:"specialtyName"`     // Название специальности
-	SpecialtyProfile  string      `json:"specialtyProfile"`  // Профиль специальности
-	LearningStartDate time.Time   `json:"learningStartDate"` // Начало обучения
-	LearningEndDate   interface{} `json:"learningEndDate"`   // Конец обучения, может приходить null
+	Id                string    `json:"id"`                // Id для поиска оценок (тут должно быть совпадение с id внутри jwt токена)
+	PersonId          string    `json:"personId"`          // Id для поиска расписания пользователя
+	FlowId            string    `json:"flowId"`            // Id потока
+	FlowCode          string    `json:"flowCode"`          // Название потока (например 2023, Бакалавриат, Специалитет, Очная форма)
+	SpecialtyCode     string    `json:"specialtyCode"`     // Код специальности
+	SpecialtyName     string    `json:"specialtyName"`     // Название специальности
+	SpecialtyProfile  string    `json:"specialtyProfile"`  // Профиль специальности
+	LearningStartDate time.Time `json:"learningStartDate"` // Начало обучения
+	LearningEndDate   time.Time `json:"learningEndDate"`   // Конец обучения, может приходить null. Если null, то студент еще учится на направлении
 }
 
 type Employee struct {

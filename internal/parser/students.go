@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 type Student struct {
@@ -51,6 +52,9 @@ func (p *parser) FindStudents(ctx context.Context, fullName string) ([]Student, 
 					ScheduleId:       s.PersonId,
 					GradesId:         s.Id,
 				}
+				if s.LearningEndDate.Unix() > 0 && s.LearningStartDate.Before(time.Now()) {
+					student.SpecialtyProfile = "<i>Не является студентом на данный момент</i>" // Костыль, но сойдет
+				}
 				ok = true
 				break
 			}
@@ -77,6 +81,9 @@ func (p *parser) FindStudents(ctx context.Context, fullName string) ([]Student, 
 		if ok {
 			result = append(result, student)
 		}
+	}
+	if len(result) == 0 {
+		return nil, ErrStudentsNotFound
 	}
 	return result, nil
 }
