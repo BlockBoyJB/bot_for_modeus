@@ -60,7 +60,7 @@ func (p *parser) WeekSchedule(ctx context.Context, scheduleId string, now time.T
 		result[currDay] = append(result[currDay], schedule[i])
 		// слайс отсортированный, поэтому разделять расписание по дням можно таким способом
 		if schedule[i+1].start.Weekday() > schedule[i].start.Weekday() {
-			currDay++
+			currDay = int(schedule[i+1].start.Weekday())
 		}
 	}
 	result[currDay] = append(result[currDay], schedule[len(schedule)-1])
