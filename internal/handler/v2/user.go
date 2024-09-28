@@ -124,16 +124,26 @@ func (r *userRouter) cmdStop(c bot.Context) error {
 
 func (r *userRouter) stateConfirmDelete(c bot.Context) error {
 	defer func() { _ = c.Clear() }()
-	if c.Text() == "да" {
-		if err := r.user.Delete(c.Context(), c.UserId()); err != nil {
-			if errors.Is(err, service.ErrUserNotFound) {
-				return c.EditMessage(txtUserNotFound)
-			}
-			return err
-		}
-		return c.EditMessage(txtUserDeleted)
+	if c.Text() != "да" {
+		return c.EditMessage("Пользователь не удален!\n" + txtDefault)
 	}
-	return c.EditMessage("Пользователь не удален!\n" + txtDefault)
+	u, err := r.user.Find(c.Context(), c.UserId())
+	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			return c.EditMessage(txtUserNotFound)
+		}
+		return err
+	}
+	if err = r.user.Delete(c.Context(), c.UserId()); err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			return c.EditMessage(txtUserNotFound)
+		}
+		return err
+	}
+	if err = r.parser.DeleteToken(u.Login); err != nil {
+		return err
+	}
+	return c.EditMessage(txtUserDeleted)
 }
 
 var (

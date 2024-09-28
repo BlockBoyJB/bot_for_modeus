@@ -14,7 +14,7 @@ const (
 
 type Parser interface {
 	modeusClient
-	seleniumClient
+	tokenClient
 }
 
 type modeusClient interface {
@@ -31,18 +31,23 @@ type modeusClient interface {
 	CoursesTotalResults(token string, input SecondaryGradesRequest) (SecondaryGradesResponse, error)
 }
 
-type seleniumClient interface {
-	ExtractToken(login, password string, timeout time.Duration) (string, error)
+// Вынес работу с токенами в отдельный сервис. Теперь взаимодействие через http (может grpc сделаю).
+type tokenClient interface {
+	// GetToken получает токен из модеуса, сохраняет в кэш и ежедневно обновляет
+	GetToken(login, password string) (string, error)
+	// DeleteToken Удаляет токен из кэша, а также останавливает ежедневное обновление токена.
+	// Если этого не сделать, то будут обновляться токены не существующих пользователей (если пользователь нажал /stop)
+	DeleteToken(login string) error
 }
 
 type modeus struct {
-	*Selenium
+	*TokenService
 	client *http.Client
 }
 
-func NewModeus(selenium *Selenium) Parser {
+func NewModeus(ts *TokenService) Parser {
 	return &modeus{
-		Selenium: selenium,
+		TokenService: ts,
 		client: &http.Client{
 			Timeout: defaultModeusTimeout,
 		},

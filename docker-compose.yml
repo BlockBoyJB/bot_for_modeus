@@ -31,13 +31,23 @@ services:
     networks:
       - bot
 
-  selenium:
-    container_name: bot-selenium
-    image: selenium/standalone-chrome:latest
-    deploy: # локально с 16ГБ+ озу все отлично, но на сервере где <= 2ГБ уже плохо
+  parser:
+    container_name: bot-parser
+    image: ${PARSER_IMAGE}
+    volumes:
+      - ./logs/parser:/logs
+    env_file:
+      - docker.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_started
+    deploy:
       resources:
         limits:
-          memory: 1gb
+          cpus: "2.0"
+          memory: 2gb
     networks:
       - bot
 
@@ -45,6 +55,8 @@ services:
     container_name: bot-redis
     image: redis:latest
     restart: always
+    ports:
+      - "6379:6379"
     networks:
       - bot
 

@@ -34,20 +34,13 @@ func Run() {
 	}
 	defer mongodb.Disconnect()
 
-	// selenium for modeus parser
-	selenium, err := modeus.NewSeleniumFromConfig(cfg.Selenium.ClientMode, cfg.Selenium.Url, cfg.Selenium.LocalPath)
-	if err != nil {
-		log.Fatalf("selenium init error: %s", err)
-	}
-	defer selenium.CloseClient()
-
 	// redis database
 	rdb := redis.NewRedis(cfg.Redis.Url)
 	defer rdb.Close()
 
 	d := &service.ServicesDependencies{
 		Repos:     repo.NewRepositories(mongodb),
-		Parser:    modeus.NewModeus(selenium),
+		Parser:    modeus.NewModeus(modeus.NewTokenService(cfg.TokenService.Url)),
 		Redis:     rdb,
 		Crypter:   crypter.NewCrypter(cfg.Crypter.Secret),
 		RootLogin: cfg.Root.Login,

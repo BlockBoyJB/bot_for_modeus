@@ -39,6 +39,8 @@ type Parser interface {
 
 	FindSemesterSubjects(ctx context.Context, input GradesInput, semester Semester) (map[string]string, error)
 	SubjectDetailedInfo(ctx context.Context, input GradesInput, semester Semester, subjectId string) (map[int]LessonGrades, error)
+
+	DeleteToken(login string) error
 }
 
 type parser struct {

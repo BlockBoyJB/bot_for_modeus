@@ -31,13 +31,14 @@ services:
     networks:
       - bot
 
-  selenium:
-    container_name: bot-selenium
-    image: selenium/standalone-chrome:latest
-    deploy:
-      resources:
-        limits:
-          memory: 1gb
+  parser:
+    container_name: bot-parser
+    image: ${PARSER_IMAGE}
+    environment:
+      HTTP_PORT: ${PARSER_HTTP_PORT}
+      REDIS_URL: ${REDIS_URL}
+    volumes:
+      - ./logs/parser:/logs
     networks:
       - bot
 

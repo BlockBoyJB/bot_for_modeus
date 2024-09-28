@@ -1,17 +1,12 @@
 package parser
 
 import (
-	"bot_for_modeus/pkg/modeus"
 	"context"
-	"errors"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 const (
-	tokenPrefix          = "token:"
-	defaultParserTimeout = time.Minute
-	defaultTTL           = time.Hour*23 + time.Minute*50
+	tokenPrefix = "token:"
 )
 
 func (p *parser) rootToken(ctx context.Context) (string, error) {
@@ -23,43 +18,23 @@ func (p *parser) userToken(ctx context.Context, login, password string) (string,
 }
 
 func (p *parser) parseToken(ctx context.Context, login, password string) (string, error) {
-	token, err := p.redis.Get(ctx, tokenKey(login)).Result()
-	if err == nil && token != "" {
-		return token, nil
+	if t, err := p.redis.Get(ctx, tokenKey(login)).Result(); err == nil && t != "" {
+		return t, nil
 	}
-	token, err = p.modeus.ExtractToken(login, password, defaultParserTimeout)
+	t, err := p.modeus.GetToken(login, password)
 	if err != nil {
-		if errors.Is(err, modeus.ErrIncorrectInputData) {
-			return "", ErrIncorrectLoginPassword
-		}
-		log.Errorf("%s/parseToken error parse token from selenium client: %s", parserServicePrefixLog, err)
+		log.Errorf("%s/parseToken error get token from service: %s", parserServicePrefixLog, err)
 		return "", err
 	}
-	if err = p.redis.Set(ctx, tokenKey(login), token, defaultTTL).Err(); err != nil {
-		log.Errorf("%s/parseToken error save token into redis: %s", parserServicePrefixLog, err)
-		return "", err
-	}
-	go p.watchToken(login, password, defaultTTL-time.Minute)
-	return token, nil
+	return t, nil
 }
 
-// TODO функция продолжит работу даже после того как пользователь перестанет пользоваться ботом
-
-// Такой немного костыльный метод, чтобы обновлять токен до его истечения
-// Если этого не сделать, то в промежуток до его обновления селениум просто умрет от количества запросов
-func (p *parser) watchToken(login, password string, d time.Duration) {
-	for {
-		time.Sleep(d)
-		token, err := p.modeus.ExtractToken(login, password, defaultParserTimeout)
-		if err != nil {
-			log.Errorf("%s/watchToken error parse token from selenium client: %p", parserServicePrefixLog, err)
-			return // завершаем работу, потому что parseToken в случае ошибки запустит еще одну такую же
-		}
-		if err = p.redis.Set(context.Background(), tokenKey(login), token, defaultTTL).Err(); err != nil {
-			log.Errorf("%s/watchToken error save token into redis: %p", parserServicePrefixLog, err)
-			return // завершаем работу, потому что parseToken в случае ошибки запустит еще одну такую же
-		}
+func (p *parser) DeleteToken(login string) error {
+	if err := p.modeus.DeleteToken(login); err != nil {
+		log.Errorf("%s/DeleteToken error request to delete token from service: %s", parserServicePrefixLog, err)
+		return err
 	}
+	return nil
 }
 
 func tokenKey(login string) string {

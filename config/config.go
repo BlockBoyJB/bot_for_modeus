@@ -6,13 +6,13 @@ import (
 )
 
 type Config struct {
-	Bot      Bot
-	MongoDB  MongoDB
-	Redis    Redis
-	Log      Log
-	Selenium Selenium
-	Root     Root
-	Crypter  Crypter
+	Bot          Bot
+	MongoDB      MongoDB
+	Redis        Redis
+	Log          Log
+	Root         Root
+	Crypter      Crypter
+	TokenService TokenService
 }
 
 type (
@@ -31,17 +31,15 @@ type (
 		Level  string `env-required:"true" env:"LOG_LEVEL"`
 		Output string `env-required:"true" env:"LOG_OUTPUT"`
 	}
-	Selenium struct {
-		Url        string `env-required:"true" env:"SELENIUM_URL"`
-		LocalPath  string `env-required:"true" env:"SELENIUM_LOCAL"`
-		ClientMode string `env-required:"true" env:"SELENIUM_MODE"`
-	}
 	Root struct {
 		Login    string `env-required:"true" env:"MAIN_USER"`
 		Password string `env-required:"true" env:"MAIN_PASS"`
 	}
 	Crypter struct {
 		Secret string `env-required:"true" env:"SECRET"`
+	}
+	TokenService struct {
+		Url string `env-required:"true" env:"TOKEN_SERVICE_URL"`
 	}
 )
 
