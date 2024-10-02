@@ -89,14 +89,18 @@ func (r *friendsRouter) stateChooseFriend(c bot.Context) error {
 		return err
 	}
 
-	if err := c.EditMessageWithInlineKB(txtChooseFriendAction, tgmodel.ChooseFriendAction); err != nil {
+	if err := c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseFriendAction, fullName), tgmodel.ChooseFriendAction); err != nil {
 		return err
 	}
 	return c.SetState(stateChooseFriendAction)
 }
 
 func (r *friendsRouter) callbackChooseFriendActionBack(c bot.Context) error {
-	if err := c.EditMessageWithInlineKB(txtChooseFriendAction, tgmodel.ChooseFriendAction); err != nil {
+	var fullName string
+	if err := c.GetData("full_name", &fullName); err != nil {
+		return err
+	}
+	if err := c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseFriendAction, fullName), tgmodel.ChooseFriendAction); err != nil {
 		return err
 	}
 	return c.SetState(stateChooseFriendAction)
@@ -203,7 +207,7 @@ func (r *friendsRouter) stateChooseFindFriend(c bot.Context) error {
 	}
 
 	kb := [][]tgbotapi.InlineKeyboardButton{tgmodel.ChooseFriendAction[0][:2]}
-	if err = c.EditMessageWithInlineKB("Друг успешно сохранен!\n"+txtChooseFriendAction, kb); err != nil {
+	if err = c.EditMessageWithInlineKB("Друг успешно сохранен!\nВыберите действие", kb); err != nil {
 		return err
 	}
 	return c.SetState(stateChooseFriendAction)

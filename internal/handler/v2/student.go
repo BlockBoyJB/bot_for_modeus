@@ -92,14 +92,18 @@ func (r *studentRouter) stateChooseOtherStudent(c bot.Context) error {
 		return err
 	}
 
-	if err = c.EditMessageWithInlineKB(txtChooseOtherStudentAction, tgmodel.OtherStudentButtons); err != nil {
+	if err = c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseOtherStudentAction, s.FullName), tgmodel.OtherStudentButtons); err != nil {
 		return err
 	}
 	return c.SetState(stateChooseOtherStudentAction)
 }
 
 func (r *studentRouter) callbackChooseOtherStudentActionBack(c bot.Context) error {
-	if err := c.EditMessageWithInlineKB(txtChooseOtherStudentAction, tgmodel.OtherStudentButtons); err != nil {
+	var fullName string
+	if err := c.GetData("full_name", &fullName); err != nil {
+		return err
+	}
+	if err := c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseOtherStudentAction, fullName), tgmodel.OtherStudentButtons); err != nil {
 		return err
 	}
 	return c.SetState(stateChooseOtherStudentAction)
