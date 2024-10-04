@@ -33,7 +33,6 @@ func newSettingsRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 }
 
 func (r *settingsRouter) cmdSettings(c bot.Context) error {
-	_ = c.Clear()
 	return c.SendMessageWithInlineKB(txtSettings, tgmodel.SettingsButtons)
 }
 
@@ -68,7 +67,9 @@ func (r *settingsRouter) stateAddLoginPassword(c bot.Context) error {
 		}
 		return err
 	}
-	_ = c.Clear()
+	if err = c.DelData("state"); err != nil {
+		return err
+	}
 	return c.SendMessage("Логин и пароль успешно добавлены!\n" + txtDefault)
 }
 

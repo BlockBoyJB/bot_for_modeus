@@ -110,12 +110,13 @@ func (r *userRouter) stateActionAfterCreate(c bot.Context) error {
 		}
 		return c.SetState(stateAddLoginPassword)
 	}
-	_ = c.Clear()
+	if err := c.DelData("students"); err != nil {
+		return err
+	}
 	return c.EditMessage("Пользователь успешно создан!\n" + txtDefault)
 }
 
 func (r *userRouter) cmdStop(c bot.Context) error {
-	_ = c.Clear()
 	if err := c.SendMessageWithInlineKB(txtConfirmDelete, tgmodel.YesOrNoButtons); err != nil {
 		return err
 	}
@@ -123,7 +124,6 @@ func (r *userRouter) cmdStop(c bot.Context) error {
 }
 
 func (r *userRouter) stateConfirmDelete(c bot.Context) error {
-	defer func() { _ = c.Clear() }()
 	if c.Text() != "да" {
 		return c.EditMessage("Пользователь не удален!\n" + txtDefault)
 	}
@@ -143,6 +143,9 @@ func (r *userRouter) stateConfirmDelete(c bot.Context) error {
 	if err = r.parser.DeleteToken(u.Login); err != nil {
 		return err
 	}
+	if err = c.Clear(); err != nil {
+		return err
+	}
 	return c.EditMessage(txtUserDeleted)
 }
 
@@ -151,7 +154,6 @@ var (
 )
 
 func (r *userRouter) cmdMe(c bot.Context) error {
-	_ = c.Clear()
 	return c.SendMessageWithInlineKB(txtMyProfile, tgmodel.MyProfileButtons)
 }
 

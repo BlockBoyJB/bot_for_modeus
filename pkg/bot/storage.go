@@ -23,6 +23,7 @@ type storage interface {
 	setData(id int64, key string, v any) error
 	setTempData(id int64, key string, v any, d time.Duration) error
 	getData(id int64, key string, v any) error
+	delData(id int64, keys ...string) error
 	clear(id int64) error
 }
 
@@ -110,6 +111,15 @@ func (s *memoryStorage) getData(id int64, key string, v any) error {
 	return json.Unmarshal(b, v)
 }
 
+func (s *memoryStorage) delData(id int64, keys ...string) error {
+	data := s.__getData(id)
+	for _, k := range keys {
+		delete(data, k)
+	}
+	s.__setData(id, data)
+	return nil
+}
+
 func (s *memoryStorage) clear(id int64) error {
 	s.Lock()
 	defer s.Unlock()
@@ -118,10 +128,8 @@ func (s *memoryStorage) clear(id int64) error {
 	return nil
 }
 
-// Ключи, по которым сохраняются данные пользователя (привет aiogram)
 const (
-	defaultStateKey = "fsm:%d:state" // fsm:userId:type (state/data)
-	defaultDataKey  = "fsm:%d:data"
+	redisStoragePrefix = "fsm:%d:%s"
 )
 
 type redisStorage struct {
@@ -144,92 +152,84 @@ func (s *redisStorage) setState(id int64, state string) error {
 }
 
 func (s *redisStorage) getState(id int64) (string, error) {
-	return s.Get(s.ctx, s.stateKey(id)).Result()
-}
-
-func (s *redisStorage) __setData(id int64, data map[string][]byte, d time.Duration) error {
-	b, err := json.Marshal(data)
+	state, err := s.Get(s.ctx, s.stateKey(id)).Result()
 	if err != nil {
-		return err
+		if errors.Is(err, redis.Nil) {
+			return "", ErrKeyNotExists
+		}
+		return "", err
 	}
-	return s.Set(s.ctx, s.dataKey(id), b, d).Err()
-}
-
-func (s *redisStorage) __getData(id int64) (map[string][]byte, error) {
-	ok, err := s.Exists(s.ctx, s.dataKey(id)).Result()
-	if err != nil {
-		return nil, err
-	}
-	if ok == 0 {
-		return make(map[string][]byte), nil
-	}
-
-	var data map[string][]byte
-	b, err := s.Get(s.ctx, s.dataKey(id)).Bytes()
-	if err != nil {
-		return nil, err
-	}
-	if err = json.Unmarshal(b, &data); err != nil {
-		return nil, err
-	}
-	return data, nil
+	return state, nil
 }
 
 func (s *redisStorage) setData(id int64, key string, v any) error {
-	data, err := s.__getData(id)
-	if err != nil {
-		return err
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	data[key] = b
-	return s.__setData(id, data, 0)
+	return s.setTempData(id, key, v, 0)
 }
 
 func (s *redisStorage) setTempData(id int64, key string, v any, d time.Duration) error {
-	data, err := s.__getData(id)
-	if err != nil {
-		return err
-	}
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	data[key] = b
-	return s.__setData(id, data, d)
+	return s.Set(s.ctx, s.dataKey(id, key), b, d).Err()
 }
 
 func (s *redisStorage) getData(id int64, key string, v any) error {
-	data, err := s.__getData(id)
+	b, err := s.Get(s.ctx, s.dataKey(id, key)).Bytes()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return ErrKeyNotExists
+		}
 		return err
 	}
-	b, ok := data[key]
-	if !ok {
-		return ErrKeyNotExists
-	}
-	if err = json.Unmarshal(b, v); err != nil {
-		return err
-	}
-	return nil
+	return json.Unmarshal(b, v)
 }
 
-func (s *redisStorage) clear(id int64) error {
-	if err := s.Del(s.ctx, s.stateKey(id)).Err(); err != nil {
-		return err
+// Удаляет данные по заданному ключу. Не работает с паттернами по типу fsm:id:*. Нужно точное соответствие.
+// Не возвращает ошибку redis.Nil
+func (s *redisStorage) delData(id int64, keys ...string) error {
+	var f []string
+	for _, k := range keys {
+		f = append(f, s.dataKey(id, k))
 	}
-	if err := s.Del(s.ctx, s.dataKey(id)).Err(); err != nil {
-		return err
+	return s.Del(s.ctx, f...).Err()
+}
+
+// Работает достаточно медленно, потому что стираются все пользовательские ключи, поэтому преимущественно использовать delData.
+// Не возвращает ошибку redis.Nil
+func (s *redisStorage) clear(id int64) error {
+	var (
+		cursor uint64
+		keys   []string
+	)
+
+	for {
+		k, nc, err := s.Scan(s.ctx, cursor, s.dataKey(id, "*"), 20).Result()
+		if err != nil {
+			return err
+		}
+
+		keys = append(keys, k...)
+		cursor = nc
+
+		if cursor == 0 {
+			break
+		}
+	}
+
+	for _, k := range keys {
+		err := s.Del(s.ctx, k).Err()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (s *redisStorage) stateKey(id int64) string {
-	return fmt.Sprintf(defaultStateKey, id)
+	return s.dataKey(id, "state")
 }
 
-func (s *redisStorage) dataKey(id int64) string {
-	return fmt.Sprintf(defaultDataKey, id)
+func (s *redisStorage) dataKey(id int64, key string) string {
+	return fmt.Sprintf(redisStoragePrefix, id, key)
 }

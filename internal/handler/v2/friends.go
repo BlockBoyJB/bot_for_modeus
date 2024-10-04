@@ -34,7 +34,6 @@ func newFriendsRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 }
 
 func (r *friendsRouter) cmdFriends(c bot.Context) error {
-	_ = c.Clear()
 	user, err := r.user.Find(c.Context(), c.UserId())
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
@@ -124,10 +123,7 @@ func (r *friendsRouter) stateChooseFriendAction(c bot.Context) error {
 		}); err != nil {
 			return err
 		}
-		if err = c.EditMessage(fmt.Sprintf("Друг (%s) успешно удален\n"+txtDefault, fullName)); err != nil {
-			return err
-		}
-		return c.Clear()
+		return c.EditMessage(fmt.Sprintf("Друг (%s) успешно удален\n"+txtDefault, fullName))
 	}
 
 	text, kb, err := studentCurrentSchedule(c, r.parser, scheduleId)
@@ -194,7 +190,9 @@ func (r *friendsRouter) stateChooseFindFriend(c bot.Context) error {
 	if err = c.GetData("friends", &friends); err != nil {
 		return err
 	}
-	_ = c.Clear()
+	if err = c.DelData("students"); err != nil {
+		return err
+	}
 	friends[s.ScheduleId] = s.FullName
 	if err = c.SetData("friends", friends); err != nil {
 		return err

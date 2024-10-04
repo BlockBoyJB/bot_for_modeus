@@ -29,7 +29,6 @@ func newStudentRouter(b *bot.Bot, parser parser.Parser) {
 }
 
 func (r *studentRouter) cmdOtherStudent(c bot.Context) error {
-	_ = c.Clear()
 	if err := c.SendMessage(txtInputOtherStudent); err != nil {
 		return err
 	}

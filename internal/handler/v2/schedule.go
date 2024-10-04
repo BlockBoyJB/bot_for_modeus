@@ -55,7 +55,6 @@ func newScheduleRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 }
 
 func (r *scheduleRouter) cmdDaySchedule(c bot.Context) error {
-	_ = c.Clear()
 	user, err := r.user.Find(c.Context(), c.UserId())
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
@@ -90,7 +89,6 @@ func (r *scheduleRouter) cmdDaySchedule(c bot.Context) error {
 }
 
 func (r *scheduleRouter) cmdWeekSchedule(c bot.Context) error {
-	_ = c.Clear()
 	user, err := r.user.Find(c.Context(), c.UserId())
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
@@ -173,7 +171,6 @@ func (r *scheduleRouter) stateUserSchedule(c bot.Context) error {
 }
 
 func (r *scheduleRouter) cmdGrades(c bot.Context) error {
-	_ = c.Clear()
 	u, err := r.user.Find(c.Context(), c.UserId())
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {

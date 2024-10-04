@@ -26,6 +26,7 @@ type Context interface {
 	SetData(key string, v any) error
 	SetTempData(key string, v any, d time.Duration) error
 	GetData(key string, v any) error
+	DelData(keys ...string) error
 	Clear() error
 }
 
@@ -151,6 +152,10 @@ func (c *nativeContext) SetTempData(key string, v any, d time.Duration) error {
 
 func (c *nativeContext) GetData(key string, v any) error {
 	return c.bot.storage.getData(c.UserId(), key, v)
+}
+
+func (c *nativeContext) DelData(keys ...string) error {
+	return c.bot.storage.delData(c.UserId(), keys...)
 }
 
 func (c *nativeContext) Clear() error {
