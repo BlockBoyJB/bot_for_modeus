@@ -46,6 +46,8 @@ services:
     container_name: bot-redis
     image: redis:latest
     restart: always
+    volumes:
+      - ./redis_data:/data
     networks:
       - bot
 
