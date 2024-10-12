@@ -6,7 +6,8 @@ on:
       - main
 
 env:
-  TEST_CONTAINER_NAME: "test_mongo"
+  TEST_MONGO_CONTAINER: "test_mongo"
+  TEST_REDIS_CONTAINER: "test_redis"
 
 jobs:
   tests:
@@ -21,13 +22,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: create test db
-        run: docker run --name $(echo TEST_CONTAINER_NAME) --rm -d -p 27017:27017 mongo:5.0-rc-focal
+        run: | 
+          docker run --name $(echo TEST_MONGO_CONTAINER) --rm -d -p 27017:27017 mongo:5.0-rc-focal
+          docker run --name $(echo TEST_REDIS_CONTAINER) --rm -d -p 6379:6379 redis:latest
 
       - name: run tests
         run: go test -v ./...
 
       - name: remove containers
-        run: docker stop $(echo TEST_CONTAINER_NAME)
+        run: | 
+          docker stop $(echo TEST_MONGO_CONTAINER)
+          docker stop $(echo TEST_REDIS_CONTAINER)
 
   build_and_push:
     needs: tests
@@ -62,7 +67,7 @@ jobs:
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
-          password: ${{ secrets.PASSWORD }}
+          key: ${{ secrets.SSH_KEY }}
           source: "deploy/"
           target: ${{ secrets.WORKDIR }}
           strip_components: 1
@@ -72,7 +77,7 @@ jobs:
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
-          password: ${{ secrets.PASSWORD }}
+          key: ${{ secrets.SSH_KEY }}
           script: |
             cd ${{ secrets.WORKDIR }}
             docker-compose stop bot nginx
