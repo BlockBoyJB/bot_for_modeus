@@ -62,6 +62,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./geo.conf:/etc/nginx/geo.conf
       - ./logs/nginx:/var/log/nginx
       - ${NGINX_CERT}:/etc/nginx/certs/cert.pem
       - ${NGINX_KEY}:/etc/nginx/certs/privkey.pem
