@@ -153,12 +153,11 @@ func TestUserService_Find(t *testing.T) {
 					GradesId:   "foobar",
 					Friends:    map[string]string{},
 				}, nil)
-				c.EXPECT().Decrypt("crypt_password").Return("password", nil)
 			},
 			expectOutput: UserOutput{
 				FullName:   "vasya",
 				Login:      "foo",
-				Password:   "password",
+				Password:   "crypt_password",
 				ScheduleId: "foobar",
 				GradesId:   "foobar",
 				Friends:    map[string]string{},
@@ -207,26 +206,6 @@ func TestUserService_Find(t *testing.T) {
 			},
 			mockBehaviour: func(u *repomocks.MockUser, c *cryptermocks.MockCrypter, a args) {
 				u.EXPECT().FindById(a.ctx, a.userId).Return(dbmodel.User{}, errors.New("unexpected error"))
-			},
-			expectErr: errors.New("unexpected error"),
-		},
-		{
-			testName: "unexpected user decrypt password error",
-			args: args{
-				ctx:    context.Background(),
-				userId: 1,
-			},
-			mockBehaviour: func(u *repomocks.MockUser, c *cryptermocks.MockCrypter, a args) {
-				u.EXPECT().FindById(a.ctx, a.userId).Return(dbmodel.User{
-					UserId:     a.userId,
-					FullName:   "vasya",
-					Login:      "foo",
-					Password:   "crypt_password",
-					ScheduleId: "foobar",
-					GradesId:   "foobar",
-					Friends:    map[string]string{},
-				}, nil)
-				c.EXPECT().Decrypt("crypt_password").Return("", errors.New("unexpected error"))
 			},
 			expectErr: errors.New("unexpected error"),
 		},

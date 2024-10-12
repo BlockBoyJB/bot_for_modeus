@@ -42,7 +42,7 @@ func newScheduleRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 	b.Message(tgmodel.DayScheduleButton, r.cmdDaySchedule)
 	b.Command("/week_schedule", r.cmdWeekSchedule)
 	b.Message(tgmodel.WeekScheduleButton, r.cmdWeekSchedule)
-	b.State(stateUserSchedule, r.stateUserSchedule)
+	b.AddTree(bot.OnCallback, "/user/:type/:date/:schedule_id", r.callbackUserSchedule)
 
 	b.Command("/grades", r.cmdGrades)
 	b.Message(tgmodel.GradesButton, r.cmdGrades)
@@ -55,69 +55,39 @@ func newScheduleRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 }
 
 func (r *scheduleRouter) cmdDaySchedule(c bot.Context) error {
-	user, err := r.user.Find(c.Context(), c.UserId())
+	gi, err := lookupGI(c, r.user)
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			return c.SendMessage(txtUserNotFound)
-		}
-	}
-
-	gi := parser.GradesInput{
-		Login:      user.Login,
-		Password:   user.Password,
-		ScheduleId: user.ScheduleId,
-		GradesId:   user.GradesId,
-	}
-	if err = c.SetData("grades_input", gi); err != nil {
 		return err
 	}
 
-	text, kb, err := studentDaySchedule(c.Context(), r.parser, time.Now(), user.ScheduleId)
+	text, kb, err := studentDaySchedule(c.Context(), r.parser, time.Now(), gi.ScheduleId, "user")
 	if err != nil {
 		return err
 	}
 
 	// Кнопка оценок на день доступна только для пользователей с логином и паролем
-	if user.Login != "" && user.Password != "" {
+	if gi.Login != "" && gi.Password != "" {
 		kb = append(kb, tgmodel.WatchDayGradesButton(time.Now())...)
 	}
 
-	if err = c.SendMessageWithInlineKB(text, kb); err != nil {
-		return err
-	}
-	return c.SetState(stateUserSchedule)
+	return c.SendMessageWithInlineKB(text, kb)
 }
 
 func (r *scheduleRouter) cmdWeekSchedule(c bot.Context) error {
-	user, err := r.user.Find(c.Context(), c.UserId())
-	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			return c.SendMessage(txtUserNotFound)
-		}
-	}
-
-	gi := parser.GradesInput{
-		Login:      user.Login,
-		Password:   user.Password,
-		ScheduleId: user.ScheduleId,
-		GradesId:   user.GradesId,
-	}
-	if err = c.SetData("grades_input", gi); err != nil {
-		return err
-	}
-
-	text, kb, err := studentWeekSchedule(c.Context(), r.parser, time.Now(), user.ScheduleId)
+	gi, err := lookupGI(c, r.user)
 	if err != nil {
 		return err
 	}
-	if err = c.SendMessageWithInlineKB(text, kb); err != nil {
+
+	text, kb, err := studentWeekSchedule(c.Context(), r.parser, time.Now(), gi.ScheduleId, "user")
+	if err != nil {
 		return err
 	}
-	return c.SetState(stateUserSchedule)
+	return c.SendMessageWithInlineKB(text, kb)
 }
 
-func (r *scheduleRouter) stateUserSchedule(c bot.Context) error {
-	t, day, err := parseCallbackDate(c)
+func (r *scheduleRouter) callbackUserSchedule(c bot.Context) error {
+	t, day, _, err := parseCallbackDate(c)
 	if err != nil {
 		if errors.Is(err, ErrIncorrectInput) {
 			return c.SendMessage(txtWarn)
@@ -125,8 +95,8 @@ func (r *scheduleRouter) stateUserSchedule(c bot.Context) error {
 		return err
 	}
 
-	var gi parser.GradesInput
-	if err = c.GetData("grades_input", &gi); err != nil {
+	gi, err := lookupGI(c, r.user)
+	if err != nil {
 		return err
 	}
 
@@ -137,7 +107,7 @@ func (r *scheduleRouter) stateUserSchedule(c bot.Context) error {
 
 	switch t {
 	case "day":
-		text, kb, err = studentDaySchedule(c.Context(), r.parser, day, gi.ScheduleId)
+		text, kb, err = studentDaySchedule(c.Context(), r.parser, day, gi.ScheduleId, "user")
 		if err != nil {
 			return err
 		}
@@ -146,11 +116,11 @@ func (r *scheduleRouter) stateUserSchedule(c bot.Context) error {
 			kb = append(kb, tgmodel.WatchDayGradesButton(day)...)
 		}
 	case "week":
-		text, kb, err = studentWeekSchedule(c.Context(), r.parser, day, gi.ScheduleId)
+		text, kb, err = studentWeekSchedule(c.Context(), r.parser, day, gi.ScheduleId, "user")
 	case "grades":
 		// на всякий случай, хотя фактически невозможно
 		if gi.Login == "" || gi.Password == "" {
-			kb = append(tgmodel.BackButton("day/"+day.Format(time.DateOnly)), tgmodel.GradesLink...)
+			kb = append(tgmodel.BackButton("/user/day/"+day.Format(time.DateOnly)+"/"+gi.ScheduleId), tgmodel.GradesLink...)
 			return c.EditMessageWithInlineKB(txtRequiredLoginPass, kb)
 		}
 		grades, e := r.parser.DayGrades(c.Context(), day, gi)
@@ -171,22 +141,12 @@ func (r *scheduleRouter) stateUserSchedule(c bot.Context) error {
 }
 
 func (r *scheduleRouter) cmdGrades(c bot.Context) error {
-	u, err := r.user.Find(c.Context(), c.UserId())
+	gi, err := lookupGI(c, r.user)
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			return c.SendMessage(txtUserNotFound)
-		}
 		return err
 	}
-	if u.Login == "" || u.Password == "" {
+	if gi.Login == "" || gi.Password == "" {
 		return c.SendMessageWithInlineKB(txtRequiredLoginPass, tgmodel.GradesLink)
-	}
-
-	gi := parser.GradesInput{
-		Login:      u.Login,
-		Password:   u.Password,
-		ScheduleId: u.ScheduleId,
-		GradesId:   u.GradesId,
 	}
 
 	semester, err := r.parser.FindCurrentSemester(c.Context(), gi)
@@ -197,9 +157,6 @@ func (r *scheduleRouter) cmdGrades(c bot.Context) error {
 		return err
 	}
 
-	if err = c.SetData("grades_input", gi); err != nil {
-		return err
-	}
 	if err = c.SetData("semester", semester); err != nil {
 		return err
 	}
@@ -222,12 +179,13 @@ func (r *scheduleRouter) callbackSemesterGradesBack(c bot.Context) error {
 		return c.EditMessageWithInlineKB(text, tgmodel.GradesButtons)
 	}
 
-	var gi parser.GradesInput
-	if err := c.GetData("grades_input", &gi); err != nil {
+	gi, err := lookupGI(c, r.user)
+	if err != nil {
 		return err
 	}
+
 	var s parser.Semester
-	if err := c.GetData("semester", &s); err != nil {
+	if err = c.GetData("semester", &s); err != nil {
 		return err
 	}
 	grades, err := r.parser.SemesterTotalGrades(c.Context(), gi, s)
@@ -242,8 +200,8 @@ func (r *scheduleRouter) callbackSemesterGradesBack(c bot.Context) error {
 }
 
 func (r *scheduleRouter) callbackChangeSemester(c bot.Context) error {
-	var gi parser.GradesInput
-	if err := c.GetData("grades_input", &gi); err != nil {
+	gi, err := lookupGI(c, r.user)
+	if err != nil {
 		return err
 	}
 	semesters, err := r.parser.FindAllSemesters(c.Context(), gi)
@@ -280,8 +238,8 @@ func (r *scheduleRouter) stateChooseSemester(c bot.Context) error {
 		return err
 	}
 
-	var gi parser.GradesInput
-	if err := c.GetData("grades_input", &gi); err != nil {
+	gi, err := lookupGI(c, r.user)
+	if err != nil {
 		return err
 	}
 	grades, err := r.parser.SemesterTotalGrades(c.Context(), gi, s)
@@ -297,12 +255,12 @@ func (r *scheduleRouter) stateChooseSemester(c bot.Context) error {
 }
 
 func (r *scheduleRouter) callbackSubjectLessonsGrades(c bot.Context) error {
-	var gi parser.GradesInput
-	if err := c.GetData("grades_input", &gi); err != nil {
+	gi, err := lookupGI(c, r.user)
+	if err != nil {
 		return err
 	}
 	var semester parser.Semester
-	if err := c.GetData("semester", &semester); err != nil {
+	if err = c.GetData("semester", &semester); err != nil {
 		return err
 	}
 	subjects, err := r.parser.FindSemesterSubjects(c.Context(), gi, semester)
@@ -327,15 +285,15 @@ func (r *scheduleRouter) callbackChooseSubjectBack(c bot.Context) error {
 		}
 		return c.SetState(stateChooseSubject)
 	}
-	var gi parser.GradesInput
-	if err := c.GetData("grades_input", &gi); err != nil {
+	gi, err := lookupGI(c, r.user)
+	if err != nil {
 		return err
 	}
 	var semester parser.Semester
-	if err := c.GetData("semester", &semester); err != nil {
+	if err = c.GetData("semester", &semester); err != nil {
 		return err
 	}
-	subjects, err := r.parser.FindSemesterSubjects(c.Context(), gi, semester)
+	subjects, err = r.parser.FindSemesterSubjects(c.Context(), gi, semester)
 	if err != nil {
 		return err
 	}
@@ -348,12 +306,12 @@ func (r *scheduleRouter) callbackChooseSubjectBack(c bot.Context) error {
 }
 
 func (r *scheduleRouter) stateChooseSubject(c bot.Context) error {
-	var gi parser.GradesInput
-	if err := c.GetData("grades_input", &gi); err != nil {
+	gi, err := lookupGI(c, r.user)
+	if err != nil {
 		return err
 	}
 	var semester parser.Semester
-	if err := c.GetData("semester", &semester); err != nil {
+	if err = c.GetData("semester", &semester); err != nil {
 		return err
 	}
 	subjectLessons, err := r.parser.SubjectDetailedInfo(c.Context(), gi, semester, c.Text())

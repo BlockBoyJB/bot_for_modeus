@@ -69,22 +69,14 @@ func (s *userService) Find(ctx context.Context, userId int64) (UserOutput, error
 		log.Errorf("%s/Find error find user: %s", userServicePrefixLog, err)
 		return UserOutput{}, err
 	}
-	user := UserOutput{
+	return UserOutput{
 		FullName:   u.FullName,
 		Login:      u.Login,
 		Password:   u.Password,
 		ScheduleId: u.ScheduleId,
 		GradesId:   u.GradesId,
 		Friends:    u.Friends,
-	}
-	if u.Password != "" {
-		user.Password, err = s.crypter.Decrypt(u.Password)
-		if err != nil {
-			log.Errorf("%s/Find user error decrypt password: %s", userServicePrefixLog, err)
-			return UserOutput{}, err
-		}
-	}
-	return user, nil
+	}, nil
 }
 
 func (s *userService) UpdateLoginPassword(ctx context.Context, input UserLoginPasswordInput) error {
@@ -156,4 +148,13 @@ func (s *userService) DeleteFriend(ctx context.Context, input FriendInput) error
 		return err
 	}
 	return nil
+}
+
+func (s *userService) Decrypt(input string) (string, error) {
+	d, err := s.crypter.Decrypt(input)
+	if err != nil {
+		log.Errorf("%s/Decrypt error decrypt user data: %s", userServicePrefixLog, err)
+		return "", err
+	}
+	return d, nil
 }

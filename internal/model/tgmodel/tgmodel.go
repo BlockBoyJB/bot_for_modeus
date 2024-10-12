@@ -32,9 +32,15 @@ var YesOrNoButtons = [][]tgbotapi.InlineKeyboardButton{
 	{tgbotapi.NewInlineKeyboardButtonData("Да", "да"), tgbotapi.NewInlineKeyboardButtonData("Нет", "нет")},
 }
 
-var OtherStudentButtons = [][]tgbotapi.InlineKeyboardButton{
-	{tgbotapi.NewInlineKeyboardButtonData("Расписание на день", "day_schedule"), tgbotapi.NewInlineKeyboardButtonData("Расписание на неделю", "week_schedule")},
-	{tgbotapi.NewInlineKeyboardButtonData(txtBackButton, "/choose_other_student_back")},
+func OtherStudentButtons(scheduleId string) [][]tgbotapi.InlineKeyboardButton {
+	now := time.Now()
+	return [][]tgbotapi.InlineKeyboardButton{
+		{
+			tgbotapi.NewInlineKeyboardButtonData("Расписание на день", formatScheduleButtonsData(now, "day", scheduleId, "student")),
+			tgbotapi.NewInlineKeyboardButtonData("Расписание на неделю", formatScheduleButtonsData(now, "week", scheduleId, "student")),
+		},
+		{tgbotapi.NewInlineKeyboardButtonData(txtBackButton, "/choose_other_student_back")},
+	}
 }
 
 var MyProfileButtons = [][]tgbotapi.InlineKeyboardButton{
@@ -102,13 +108,17 @@ func InlineRowButtons(data map[string]string, size int) [][]tgbotapi.InlineKeybo
 	return buttons
 }
 
-func dayButtons(now time.Time, bType string) [][]tgbotapi.InlineKeyboardButton {
+func dayButtons(now time.Time, bType, scheduleId, prefix string) [][]tgbotapi.InlineKeyboardButton {
 	y := time.Date(now.Year(), now.Month(), now.Day()-1, 0, 0, 0, 0, now.Location())
 	t := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
 	return [][]tgbotapi.InlineKeyboardButton{{
-		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("◀️ %s", y.Format("02.01")), bType+"/"+y.Format(time.DateOnly)),
-		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%s ▶️", t.Format("02.01")), bType+"/"+t.Format(time.DateOnly)),
+		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("◀️ %s", y.Format("02.01")), formatScheduleButtonsData(y, bType, scheduleId, prefix)),
+		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%s ▶️", t.Format("02.01")), formatScheduleButtonsData(t, bType, scheduleId, prefix)),
 	}}
+}
+
+func formatScheduleButtonsData(t time.Time, bType, scheduleId, prefix string) string {
+	return fmt.Sprintf("/%s/%s/%s/%s", prefix, bType, t.Format(time.DateOnly), scheduleId)
 }
 
 var UICommands = []tgbotapi.BotCommand{

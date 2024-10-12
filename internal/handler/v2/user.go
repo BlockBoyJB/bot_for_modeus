@@ -92,7 +92,7 @@ func (r *userRouter) stateChooseStudent(c bot.Context) error {
 			if e := r.user.UpdateInfo(c.Context(), input); e != nil {
 				return e
 			}
-			return c.EditMessage("Информация о пользователе успешно обновлена!\n" + txtDefault)
+			return c.EditMessage("Информация о пользователе успешно обновлена!")
 		}
 		return err
 	}
@@ -113,7 +113,7 @@ func (r *userRouter) stateActionAfterCreate(c bot.Context) error {
 	if err := c.DelData("students"); err != nil {
 		return err
 	}
-	return c.EditMessage("Пользователь успешно создан!\n" + txtDefault)
+	return c.EditMessage("Пользователь успешно создан!\n\n<b>Нажмите на любую из кнопок на клавиатуре или меню</b>, чтобы воспользоваться ботом!")
 }
 
 func (r *userRouter) cmdStop(c bot.Context) error {
@@ -125,7 +125,7 @@ func (r *userRouter) cmdStop(c bot.Context) error {
 
 func (r *userRouter) stateConfirmDelete(c bot.Context) error {
 	if c.Text() != "да" {
-		return c.EditMessage("Пользователь не удален!\n" + txtDefault)
+		return c.EditMessage("Пользователь не удален!")
 	}
 	u, err := r.user.Find(c.Context(), c.UserId())
 	if err != nil {
@@ -134,16 +134,15 @@ func (r *userRouter) stateConfirmDelete(c bot.Context) error {
 		}
 		return err
 	}
-	if err = r.user.Delete(c.Context(), c.UserId()); err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			return c.EditMessage(txtUserNotFound)
+	if u.Login != "" {
+		if err = r.parser.DeleteToken(u.Login); err != nil {
+			return err
 		}
-		return err
-	}
-	if err = r.parser.DeleteToken(u.Login); err != nil {
-		return err
 	}
 	if err = c.Clear(); err != nil {
+		return err
+	}
+	if err = r.user.Delete(c.Context(), c.UserId()); err != nil {
 		return err
 	}
 	return c.EditMessage(txtUserDeleted)
@@ -162,41 +161,30 @@ func (r *userRouter) callbackMeBack(c bot.Context) error {
 }
 
 func (r *userRouter) callbackAboutMe(c bot.Context) error {
-	u, err := r.user.Find(c.Context(), c.UserId())
-	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			return c.EditMessage(txtUserNotFound)
-		}
-		return err
-	}
-	info, err := r.parser.FindStudentById(c.Context(), u.ScheduleId)
+	gi, err := lookupGI(c, r.user)
 	if err != nil {
 		return err
 	}
-	text := "Вот информация о Вашем направлении обучения:\n"
+	info, err := r.parser.FindStudentById(c.Context(), gi.ScheduleId)
+	if err != nil {
+		return err
+	}
+	text := "Вот информация о Вашем направлении обучения:\n\n"
 	text += fmt.Sprintf(formatStudent, info.FullName, info.SpecialtyName, info.SpecialtyProfile, info.FlowCode)
 	return c.EditMessageWithInlineKB(text, kbMeBack)
 }
 
 func (r *userRouter) callbackRatings(c bot.Context) error {
-	u, err := r.user.Find(c.Context(), c.UserId())
+	gi, err := lookupGI(c, r.user)
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			return c.EditMessage(txtUserNotFound)
-		}
 		return err
 	}
-	if u.Login == "" || u.Password == "" {
+	if gi.Login == "" || gi.Password == "" {
 		kb := append(tgmodel.GradesLink, kbMeBack...)
 		return c.EditMessageWithInlineKB(txtRequiredLoginPass, kb)
 	}
 
-	cgpa, ratings, err := r.parser.Ratings(c.Context(), parser.GradesInput{
-		Login:      u.Login,
-		Password:   u.Password,
-		ScheduleId: u.ScheduleId,
-		GradesId:   u.GradesId,
-	})
+	cgpa, ratings, err := r.parser.Ratings(c.Context(), gi)
 	if err != nil {
 		return err
 	}

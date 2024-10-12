@@ -44,6 +44,8 @@ type User interface {
 	Delete(ctx context.Context, userId int64) error
 	AddFriend(ctx context.Context, input FriendInput) error
 	DeleteFriend(ctx context.Context, input FriendInput) error
+
+	Decrypt(input string) (string, error)
 }
 
 type (

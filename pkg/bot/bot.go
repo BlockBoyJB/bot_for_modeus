@@ -98,7 +98,7 @@ func (b *Bot) processMessage(u tgbotapi.Update) {
 		b.answerEmptyCallback(u.CallbackQuery)
 	}
 
-	f, ok := b.handle(u)
+	f, ok := b.handle(c, u)
 	if !ok {
 		return
 	}
@@ -111,32 +111,27 @@ func (b *Bot) processMessage(u tgbotapi.Update) {
 }
 
 // Ищем нужную ручку для обработки...
-func (b *Bot) handle(u tgbotapi.Update) (HandlerFunc, bool) {
-	var userId int64
-
+func (b *Bot) handle(c Context, u tgbotapi.Update) (HandlerFunc, bool) {
 	if u.Message != nil {
 		if u.Message.IsCommand() {
-			f, ok := b.routers[onCommand][u.Message.Text]
+			f, ok := b.routers[OnCommand].find(c, u.Message.Text)
 			return f, ok
 		}
 		// Может быть нажатие с обычной клавиатуры
-		if f, ok := b.routers[onMessage][u.Message.Text]; ok {
+		if f, ok := b.routers[OnMessage].find(c, u.Message.Text); ok {
 			return f, ok
 		}
-		userId = u.Message.From.ID
 	}
 	if u.CallbackQuery != nil {
-		f, ok := b.routers[onCallback][u.CallbackQuery.Data]
-		if ok {
-			return f, true
+		if f, ok := b.routers[OnCallback].find(c, u.CallbackQuery.Data); ok {
+			return f, ok
 		}
-		userId = u.CallbackQuery.From.ID
 	}
 	// Если условия выше ничего не вернули, значит это либо обычное сообщение от пользователя (не /команда) (попросили его что-то ввести),
 	// либо в инлайн кнопке на коллбэк есть какое-то значение, которое надо обработать отдельно от ручки коллбэков.
 	// Соответственно, при таких вариантах это какое-то состояние пользователя
-	state, _ := b.storage.getState(userId)
-	f, ok := b.routers[onState][state]
+	state, _ := b.storage.getState(c.UserId())
+	f, ok := b.routers[OnState].find(c, state)
 	return f, ok
 }
 

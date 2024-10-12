@@ -25,9 +25,10 @@ func newFriendsRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 	b.Message(tgmodel.FriendsButton, r.cmdFriends)
 	b.Callback("/choose_friend_back", r.callbackChooseFriendBack)
 	b.State(stateChooseFriend, r.stateChooseFriend)
-	b.Callback("/choose_friend_action_back", r.callbackChooseFriendActionBack)
-	b.State(stateChooseFriendAction, r.stateChooseFriendAction)
-	b.State(stateFriendSchedule, r.stateFriendSchedule)
+	b.AddTree(bot.OnCallback, "/friends/action/:schedule_id", r.callbackChooseFriendActionBack)
+	b.AddTree(bot.OnCallback, "/friends/delete/:schedule_id", r.callbackDeleteFriend)
+	b.AddTree(bot.OnCallback, "/friends/:type/:date/:schedule_id", r.callbackFriendsSchedule)
+
 	b.Callback("/add_friend", r.callbackAddFriend)
 	b.State(stateAddFriend, r.stateAddFriend)
 	b.State(stateChooseFindFriend, r.stateChooseFindFriend)
@@ -41,9 +42,9 @@ func (r *friendsRouter) cmdFriends(c bot.Context) error {
 		}
 		return err
 	}
-	text := txtChooseFriend
+	text := txtFriends
 	if len(user.Friends) == 0 {
-		text = "Ой! Кажется у Вас ни одного сохраненного друга!\nЧтобы добавить друга нажмите \"Добавить друга\""
+		text = "Ой! Кажется, у Вас ни одного сохраненного друга!"
 	}
 
 	if err = c.SetData("friends", user.Friends); err != nil {
@@ -61,9 +62,9 @@ func (r *friendsRouter) callbackChooseFriendBack(c bot.Context) error {
 	if err := c.GetData("friends", &friends); err != nil {
 		return err
 	}
-	text := txtChooseFriend
+	text := txtFriends
 	if len(friends) == 0 {
-		text = "Ой! Кажется у Вас ни одного сохраненного друга!\nЧтобы добавить друга нажмите \"Добавить друга\""
+		text = "Ой! Кажется, у Вас ни одного сохраненного друга!"
 	}
 	if err := c.EditMessageWithInlineKB(text, tgmodel.FriendsButtons(friends)); err != nil {
 		return err
@@ -81,65 +82,44 @@ func (r *friendsRouter) stateChooseFriend(c bot.Context) error {
 		return c.SendMessage(txtWarn)
 	}
 
-	if err := c.SetData("schedule_id", c.Text()); err != nil {
-		return err
-	}
-	if err := c.SetData("full_name", fullName); err != nil {
-		return err
-	}
-
-	if err := c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseFriendAction, fullName), tgmodel.ChooseFriendAction); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseFriendAction)
+	return c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseFriendAction, fullName), tgmodel.ChooseFriendAction(c.Text()))
 }
 
 func (r *friendsRouter) callbackChooseFriendActionBack(c bot.Context) error {
-	var fullName string
-	if err := c.GetData("full_name", &fullName); err != nil {
-		return err
-	}
-	if err := c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseFriendAction, fullName), tgmodel.ChooseFriendAction); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseFriendAction)
-}
-
-func (r *friendsRouter) stateChooseFriendAction(c bot.Context) error {
-	var scheduleId string
-	err := c.GetData("schedule_id", &scheduleId)
+	scheduleId := c.Param("schedule_id")
+	fullName, err := getFullName(c, scheduleId)
 	if err != nil {
 		return err
 	}
-	var fullName string
-	if err = c.GetData("full_name", &fullName); err != nil {
-		return err
-	}
+	return c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseFriendAction, fullName), tgmodel.ChooseFriendAction(scheduleId))
+}
 
-	if c.Text() == "delete_friend" {
-		if err = r.user.DeleteFriend(c.Context(), service.FriendInput{
-			UserId:     c.UserId(),
-			ScheduleId: scheduleId,
-		}); err != nil {
-			return err
-		}
-		return c.EditMessage(fmt.Sprintf("Друг (%s) успешно удален\n"+txtDefault, fullName))
-	}
+func (r *friendsRouter) callbackDeleteFriend(c bot.Context) error {
+	scheduleId := c.Param("schedule_id")
 
-	text, kb, err := studentCurrentSchedule(c, r.parser, scheduleId)
+	err := r.user.DeleteFriend(c.Context(), service.FriendInput{
+		UserId:     c.UserId(),
+		ScheduleId: scheduleId,
+	})
 	if err != nil {
 		return err
 	}
-	text = fmt.Sprintf(formatFullName, fullName) + text
-	kb = append(kb, tgmodel.BackButton("/choose_friend_action_back")...)
-	if err = c.EditMessageWithInlineKB(text, kb); err != nil {
+
+	var friends map[string]string
+	if err = c.GetData("friends", &friends); err != nil {
 		return err
 	}
-	return c.SetState(stateFriendSchedule)
+	fullName := friends[scheduleId]
+	delete(friends, scheduleId)
+	if err = c.SetData("friends", friends); err != nil {
+		return err
+	}
+
+	return c.EditMessage(fmt.Sprintf("<b>%s</b> удален из друзей!", fullName))
 }
 
-func (r *friendsRouter) stateFriendSchedule(c bot.Context) error {
-	return studentSchedule(c, r.parser, tgmodel.BackButton("/choose_friend_action_back"))
+func (r *friendsRouter) callbackFriendsSchedule(c bot.Context) error {
+	return studentSchedule(c, r.parser, "friends", tgmodel.BackButton("/friends/action/"+c.Param("schedule_id")))
 }
 
 func (r *friendsRouter) callbackAddFriend(c bot.Context) error {
@@ -177,6 +157,9 @@ func (r *friendsRouter) stateChooseFindFriend(c bot.Context) error {
 		}
 		return err
 	}
+	if err = c.DelData("students"); err != nil {
+		return err
+	}
 
 	if err = r.user.AddFriend(c.Context(), service.FriendInput{
 		UserId:     c.UserId(),
@@ -190,23 +173,14 @@ func (r *friendsRouter) stateChooseFindFriend(c bot.Context) error {
 	if err = c.GetData("friends", &friends); err != nil {
 		return err
 	}
-	if err = c.DelData("students"); err != nil {
-		return err
-	}
 	friends[s.ScheduleId] = s.FullName
 	if err = c.SetData("friends", friends); err != nil {
 		return err
 	}
-	if err = c.SetData("schedule_id", s.ScheduleId); err != nil {
-		return err
-	}
-	if err = c.SetData("full_name", s.FullName); err != nil {
+	if err = addFullName(c, s.ScheduleId, s.FullName); err != nil {
 		return err
 	}
 
-	kb := [][]tgbotapi.InlineKeyboardButton{tgmodel.ChooseFriendAction[0][:2]}
-	if err = c.EditMessageWithInlineKB("Друг успешно сохранен!\nВыберите действие", kb); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseFriendAction)
+	kb := [][]tgbotapi.InlineKeyboardButton{tgmodel.ChooseFriendAction(s.ScheduleId)[0][:2]}
+	return c.EditMessageWithInlineKB(fmt.Sprintf("<b>%s</b> добавлен в друзья!\nВыберите действие", s.FullName), kb)
 }

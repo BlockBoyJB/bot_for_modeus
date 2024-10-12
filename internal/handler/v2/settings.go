@@ -37,6 +37,7 @@ func (r *settingsRouter) cmdSettings(c bot.Context) error {
 }
 
 func (r *settingsRouter) callbackSettingsBack(c bot.Context) error {
+	_ = c.DelData("state")
 	return c.EditMessageWithInlineKB(txtSettings, tgmodel.SettingsButtons)
 }
 
@@ -67,10 +68,12 @@ func (r *settingsRouter) stateAddLoginPassword(c bot.Context) error {
 		}
 		return err
 	}
-	if err = c.DelData("state"); err != nil {
+	_ = c.DelData("state")
+	if err = c.DelData("grades_input"); err != nil {
 		return err
 	}
-	return c.SendMessage("Логин и пароль успешно добавлены!\n" + txtDefault)
+	_, _ = lookupGI(c, r.user) // перезаписываем grades_input в кэше
+	return c.SendMessageWithReplyKB("Логин и пароль успешно добавлены!", tgmodel.RowCommands)
 }
 
 func (r *settingsRouter) callbackUpdateFullName(c bot.Context) error {

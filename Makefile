@@ -17,10 +17,14 @@ mocks:
 mongo-tests:
 	docker run --name mongo --rm -d -p 27017:27017 mongo:5.0-rc-focal
 
-init-test-containers: mongo-tests
+redis-tests:
+	docker run --name redis --rm -d -p 6379:6379 redis:latest
+
+init-test-containers: mongo-tests redis-tests
 
 stop-test-containers:
 	docker stop mongo
+	docker stop redis
 
 init-tests:
 	go test -v ./...

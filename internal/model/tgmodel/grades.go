@@ -17,10 +17,13 @@ var GradesButtons = [][]tgbotapi.InlineKeyboardButton{
 
 func WatchDayGradesButton(now time.Time) [][]tgbotapi.InlineKeyboardButton {
 	return [][]tgbotapi.InlineKeyboardButton{{
-		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("Оценки на %s", now.Format("02.01")), "grades/"+now.Format(time.DateOnly)),
+		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("Оценки на %s", now.Format("02.01")), formatScheduleButtonsData(now, "grades", "user", "user")),
 	}}
 }
 
 func DayGradesButtons(now time.Time) [][]tgbotapi.InlineKeyboardButton {
-	return append(dayButtons(now, "grades"), BackButton("day/"+now.Format(time.DateOnly))...)
+	return append(
+		dayButtons(now, "grades", "user", "user"),
+		BackButton(formatScheduleButtonsData(now, "day", "user", "user"))...,
+	)
 }

@@ -205,6 +205,73 @@ func (s *redisStorageTestSuite) Test_setTempData() {
 	}
 }
 
+func (s *redisStorageTestSuite) Test_setCommonData() {
+	testCases := []struct {
+		testName string
+		key      string
+		data     any
+		ttl      time.Duration
+	}{
+		{
+			testName: "test string",
+			key:      "foobar",
+			data:     "hello_world",
+			ttl:      time.Minute,
+		},
+		{
+			testName: "test int",
+			data:     123,
+			key:      "abc",
+			ttl:      time.Hour,
+		},
+		{
+			testName: "test slice",
+			key:      "foo",
+			data:     []int{1, 2, 10, 3},
+			ttl:      time.Minute * 10,
+		},
+		{
+			testName: "test map",
+			key:      "bar",
+			data: map[int]string{
+				1: "hello",
+				2: "world",
+			},
+			ttl: time.Hour * 10,
+		},
+		{
+			testName: "test struct",
+			key:      "some_struct",
+			data: struct {
+				Name string
+				Age  int
+			}{
+				Name: "Petya",
+				Age:  18,
+			},
+			ttl: time.Second * 50,
+		},
+	}
+
+	for _, tc := range testCases {
+		err := s.storage.setCommonData(tc.key, tc.data, tc.ttl)
+		s.Assert().Nil(err)
+
+		b, err := s.redis.Get(s.ctx, s.storage.normalizeKey(tc.key)).Bytes()
+		s.Assert().Nil(err)
+
+		expectData, err := json.Marshal(tc.data)
+		s.Assert().Nil(err)
+
+		s.Assert().Equal(expectData, b)
+		if tc.ttl > 0 {
+			actualTTL, err := s.redis.TTL(s.ctx, s.storage.normalizeKey(tc.key)).Result()
+			s.Assert().Nil(err)
+			s.Assert().True(tc.ttl-actualTTL <= time.Second*2)
+		}
+	}
+}
+
 func (s *redisStorageTestSuite) Test_getData() {
 	var (
 		defaultId   int64 = 1
@@ -255,6 +322,53 @@ func (s *redisStorageTestSuite) Test_getData() {
 		var actualData map[string]string
 
 		err = s.storage.getData(tc.id, tc.key, &actualData)
+
+		s.Assert().Equal(tc.expectErr, err)
+		s.Assert().Equal(tc.expectData, actualData)
+	}
+}
+
+func (s *redisStorageTestSuite) Test_getCommonData() {
+	var (
+		defaultKey  = "foobar"
+		defaultData = map[string]string{
+			"message": "hello world",
+		}
+	)
+
+	b, err := json.Marshal(defaultData)
+	if err != nil {
+		s.T().Fatalf("marhsal test data err: %s", err)
+	}
+
+	if err = s.redis.Set(s.ctx, s.storage.normalizeKey(defaultKey), b, 0).Err(); err != nil {
+		s.T().Fatalf("setup test data into redis err: %s", err)
+	}
+
+	testCases := []struct {
+		testName   string
+		key        string
+		expectErr  error
+		expectData map[string]string
+	}{
+		{
+			testName:   "correct test",
+			key:        defaultKey,
+			expectErr:  nil,
+			expectData: defaultData,
+		},
+		{
+			testName:   "key not exist",
+			key:        "not_exist_key",
+			expectErr:  ErrKeyNotExists,
+			expectData: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		var actualData map[string]string
+
+		err = s.storage.getCommonData(tc.key, &actualData)
 
 		s.Assert().Equal(tc.expectErr, err)
 		s.Assert().Equal(tc.expectData, actualData)
@@ -325,6 +439,49 @@ func (s *redisStorageTestSuite) Test_delData() {
 
 			s.Assert().NotZero(exist)
 		}
+	}
+}
+
+func (s *redisStorageTestSuite) Test_delCommonData() {
+	var (
+		defaultKey   = "foobar"
+		otherDataKey = "other_data"
+	)
+
+	if err := s.redis.Set(s.ctx, s.storage.normalizeKey(defaultKey), "hello world", 0).Err(); err != nil {
+		s.T().Fatalf("setup test data into redis err: %s", err)
+	}
+
+	if err := s.redis.Set(s.ctx, s.storage.normalizeKey(otherDataKey), "hello world 2", 0).Err(); err != nil {
+		s.T().Fatalf("setup test data into redis err: %s", err)
+	}
+
+	testCases := []struct {
+		testName string
+		key      string
+	}{
+		{
+			testName: "correct test",
+			key:      defaultKey,
+		},
+		{
+			testName: "key not exist",
+			key:      "key_not_exist",
+		},
+	}
+
+	for _, tc := range testCases {
+		err := s.storage.delCommonData(tc.key)
+		s.Assert().Nil(err)
+
+		exist, err := s.redis.Exists(s.ctx, s.storage.normalizeKey(tc.key)).Result()
+		s.Assert().Nil(err)
+
+		s.Assert().Zero(exist)
+
+		exist, err = s.redis.Exists(s.ctx, s.storage.normalizeKey(otherDataKey)).Result()
+		s.Assert().Nil(err)
+		s.Assert().NotZero(exist)
 	}
 }
 

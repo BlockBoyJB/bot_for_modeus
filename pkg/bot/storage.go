@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/redis/go-redis/v9"
+	"strings"
 	"sync"
 	"time"
 )
@@ -22,22 +23,27 @@ type storage interface {
 	getState(id int64) (string, error)
 	setData(id int64, key string, v any) error
 	setTempData(id int64, key string, v any, d time.Duration) error
+	setCommonData(key string, v any, d time.Duration) error
 	getData(id int64, key string, v any) error
+	getCommonData(key string, v any) error
 	delData(id int64, keys ...string) error
+	delCommonData(keys ...string) error
 	clear(id int64) error
 }
 
 // Чтобы был для удобства
 type memoryStorage struct {
 	sync.RWMutex
-	state map[int64]string
-	data  map[int64]map[string][]byte
+	state  map[int64]string
+	data   map[int64]map[string][]byte
+	common map[string][]byte
 }
 
 func newMemoryStorage() *memoryStorage {
 	return &memoryStorage{
-		state: map[int64]string{},
-		data:  make(map[int64]map[string][]byte),
+		state:  map[int64]string{},
+		data:   make(map[int64]map[string][]byte),
+		common: make(map[string][]byte),
 	}
 }
 
@@ -102,9 +108,38 @@ func (s *memoryStorage) setTempData(id int64, key string, v any, d time.Duration
 	return nil
 }
 
+func (s *memoryStorage) setCommonData(key string, v any, d time.Duration) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	s.Lock()
+	defer s.Unlock()
+	s.common[key] = b
+	if d > 0 {
+		go func() {
+			time.Sleep(d)
+			s.Lock()
+			delete(s.common, key)
+			s.Unlock()
+		}()
+	}
+	return nil
+}
+
 func (s *memoryStorage) getData(id int64, key string, v any) error {
 	data := s.__getData(id)
 	b, ok := data[key]
+	if !ok {
+		return ErrKeyNotExists
+	}
+	return json.Unmarshal(b, v)
+}
+
+func (s *memoryStorage) getCommonData(key string, v any) error {
+	s.RLock()
+	defer s.RUnlock()
+	b, ok := s.common[key]
 	if !ok {
 		return ErrKeyNotExists
 	}
@@ -117,6 +152,15 @@ func (s *memoryStorage) delData(id int64, keys ...string) error {
 		delete(data, k)
 	}
 	s.__setData(id, data)
+	return nil
+}
+
+func (s *memoryStorage) delCommonData(keys ...string) error {
+	s.Lock()
+	defer s.Unlock()
+	for _, k := range keys {
+		delete(s.common, k)
+	}
 	return nil
 }
 
@@ -163,19 +207,27 @@ func (s *redisStorage) getState(id int64) (string, error) {
 }
 
 func (s *redisStorage) setData(id int64, key string, v any) error {
-	return s.setTempData(id, key, v, 0)
+	return s.setCommonData(s.dataKey(id, key), v, 0)
 }
 
 func (s *redisStorage) setTempData(id int64, key string, v any, d time.Duration) error {
+	return s.setCommonData(s.dataKey(id, key), v, d)
+}
+
+func (s *redisStorage) setCommonData(key string, v any, d time.Duration) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	return s.Set(s.ctx, s.dataKey(id, key), b, d).Err()
+	return s.Set(s.ctx, s.normalizeKey(key), b, d).Err()
 }
 
 func (s *redisStorage) getData(id int64, key string, v any) error {
-	b, err := s.Get(s.ctx, s.dataKey(id, key)).Bytes()
+	return s.getCommonData(s.dataKey(id, key), v)
+}
+
+func (s *redisStorage) getCommonData(key string, v any) error {
+	b, err := s.Get(s.ctx, s.normalizeKey(key)).Bytes()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return ErrKeyNotExists
@@ -193,6 +245,14 @@ func (s *redisStorage) delData(id int64, keys ...string) error {
 		f = append(f, s.dataKey(id, k))
 	}
 	return s.Del(s.ctx, f...).Err()
+}
+
+func (s *redisStorage) delCommonData(keys ...string) error {
+	var k []string
+	for _, key := range keys {
+		k = append(k, s.normalizeKey(key))
+	}
+	return s.Del(s.ctx, k...).Err()
 }
 
 // Работает достаточно медленно, потому что стираются все пользовательские ключи, поэтому преимущественно использовать delData.
@@ -232,4 +292,11 @@ func (s *redisStorage) stateKey(id int64) string {
 
 func (s *redisStorage) dataKey(id int64, key string) string {
 	return fmt.Sprintf(redisStoragePrefix, id, key)
+}
+
+func (s *redisStorage) normalizeKey(key string) string {
+	if strings.HasPrefix(key, "fsm:") {
+		return key
+	}
+	return "fsm:" + key
 }

@@ -14,31 +14,44 @@ type Context interface {
 	UserId() int64
 	Text() string
 
+	// Param возвращает значение параметра в маршруте
+	Param(name string) string
+
 	SendMessage(text string) error
 	SendMessageWithInlineKB(text string, kb [][]tgbotapi.InlineKeyboardButton) error
 	SendMessageWithReplyKB(text string, kb [][]tgbotapi.KeyboardButton) error
+
 	EditMessage(text string) error
 	EditMessageWithInlineKB(text string, kb [][]tgbotapi.InlineKeyboardButton) error
+
 	DeleteInlineKB() error
 
 	SetState(state string) error
 	GetState() (string, error)
+
 	SetData(key string, v any) error
 	SetTempData(key string, v any, d time.Duration) error
+	SetCommonData(key string, v any, d time.Duration) error
+
 	GetData(key string, v any) error
+	GetCommonData(key string, v any) error
+
 	DelData(keys ...string) error
+	DelCommonData(keys ...string) error
 	Clear() error
 }
 
 type nativeContext struct {
 	bot    *Bot
 	update tgbotapi.Update
+	params map[string]string
 }
 
 func (b *Bot) NewContext(u tgbotapi.Update) Context {
 	return &nativeContext{
 		bot:    b,
 		update: u,
+		params: map[string]string{},
 	}
 }
 
@@ -71,6 +84,14 @@ func (c *nativeContext) Text() string {
 	}
 	c.bot.logger.Printf("/Context/Text error get user input from request")
 	return ""
+}
+
+func (c *nativeContext) setParam(name, param string) {
+	c.params[name] = param
+}
+
+func (c *nativeContext) Param(name string) string {
+	return c.params[name]
 }
 
 func (c *nativeContext) SendMessage(text string) error {
@@ -150,12 +171,24 @@ func (c *nativeContext) SetTempData(key string, v any, d time.Duration) error {
 	return c.bot.storage.setTempData(c.UserId(), key, v, d)
 }
 
+func (c *nativeContext) SetCommonData(key string, v any, d time.Duration) error {
+	return c.bot.storage.setCommonData(key, v, d)
+}
+
 func (c *nativeContext) GetData(key string, v any) error {
 	return c.bot.storage.getData(c.UserId(), key, v)
 }
 
+func (c *nativeContext) GetCommonData(key string, v any) error {
+	return c.bot.storage.getCommonData(key, v)
+}
+
 func (c *nativeContext) DelData(keys ...string) error {
 	return c.bot.storage.delData(c.UserId(), keys...)
+}
+
+func (c *nativeContext) DelCommonData(keys ...string) error {
+	return c.bot.storage.delCommonData(keys...)
 }
 
 func (c *nativeContext) Clear() error {

@@ -6,6 +6,7 @@ import (
 	"bot_for_modeus/pkg/bot"
 	"errors"
 	"fmt"
+	"strconv"
 )
 
 type studentRouter struct {
@@ -23,9 +24,9 @@ func newStudentRouter(b *bot.Bot, parser parser.Parser) {
 	b.State(stateInputOtherStudent, r.stateInputOtherStudent)
 	b.Callback("/choose_other_student_back", r.callbackChooseOtherStudentBack)
 	b.State(stateChooseOtherStudent, r.stateChooseOtherStudent)
-	b.Callback("/choose_other_student_action_back", r.callbackChooseOtherStudentActionBack)
-	b.State(stateChooseOtherStudentAction, r.stateChooseOtherStudentAction)
-	b.State(stateOtherStudentSchedule, r.stateOtherStudentSchedule)
+
+	b.AddTree(bot.OnCallback, "/student/action/:schedule_id", r.callbackChooseOtherStudentActionBack)
+	b.AddTree(bot.OnCallback, "/student/:type/:date/:schedule_id", r.callbackOtherStudentSchedule)
 }
 
 func (r *studentRouter) cmdOtherStudent(c bot.Context) error {
@@ -50,7 +51,7 @@ func (r *studentRouter) stateInputOtherStudent(c bot.Context) error {
 		}
 		return err
 	}
-	if err = c.SetData("students", students); err != nil {
+	if err = c.SetData("other_students", students); err != nil {
 		return err
 	}
 
@@ -64,7 +65,7 @@ func (r *studentRouter) stateInputOtherStudent(c bot.Context) error {
 
 func (r *studentRouter) callbackChooseOtherStudentBack(c bot.Context) error {
 	var students []parser.Student
-	if err := c.GetData("students", &students); err != nil {
+	if err := c.GetData("other_students", &students); err != nil {
 		return err
 	}
 	text, kb := formatStudents(students)
@@ -76,60 +77,36 @@ func (r *studentRouter) callbackChooseOtherStudentBack(c bot.Context) error {
 }
 
 func (r *studentRouter) stateChooseOtherStudent(c bot.Context) error {
-	s, err := findStudent(c)
-	if err != nil {
-		if errors.Is(err, ErrIncorrectInput) {
-			return c.SendMessage(txtWarn)
-		}
+	var students []parser.Student
+	if err := c.GetData("other_students", &students); err != nil {
+		return err
+	}
+	cb := c.Update().CallbackQuery
+	if cb == nil {
+		return c.SendMessage(txtWarn)
+	}
+	num, err := strconv.Atoi(cb.Data)
+	if err != nil || num > len(students) {
+		return c.SendMessage(txtWarn)
+	}
+	s := students[num-1]
+
+	if err = addFullName(c, s.ScheduleId, s.FullName); err != nil {
 		return err
 	}
 
-	if err = c.SetData("schedule_id", s.ScheduleId); err != nil {
-		return err
-	}
-	if err = c.SetData("full_name", s.FullName); err != nil {
-		return err
-	}
-
-	if err = c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseOtherStudentAction, s.FullName), tgmodel.OtherStudentButtons); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseOtherStudentAction)
+	return c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseOtherStudentAction, s.FullName), tgmodel.OtherStudentButtons(s.ScheduleId))
 }
 
 func (r *studentRouter) callbackChooseOtherStudentActionBack(c bot.Context) error {
-	var fullName string
-	if err := c.GetData("full_name", &fullName); err != nil {
-		return err
-	}
-	if err := c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseOtherStudentAction, fullName), tgmodel.OtherStudentButtons); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseOtherStudentAction)
-}
-
-func (r *studentRouter) stateChooseOtherStudentAction(c bot.Context) error {
-	var scheduleId string
-	if err := c.GetData("schedule_id", &scheduleId); err != nil {
-		return err
-	}
-	var fullName string
-	if err := c.GetData("full_name", &fullName); err != nil {
-		return err
-	}
-
-	text, kb, err := studentCurrentSchedule(c, r.parser, scheduleId)
+	scheduleId := c.Param("schedule_id")
+	fullName, err := getFullName(c, scheduleId)
 	if err != nil {
 		return err
 	}
-	text = fmt.Sprintf(formatFullName, fullName) + text
-	kb = append(kb, tgmodel.BackButton("/choose_other_student_action_back")...)
-	if err = c.EditMessageWithInlineKB(text, kb); err != nil {
-		return err
-	}
-	return c.SetState(stateOtherStudentSchedule)
+	return c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseOtherStudentAction, fullName), tgmodel.OtherStudentButtons(scheduleId))
 }
 
-func (r *studentRouter) stateOtherStudentSchedule(c bot.Context) error {
-	return studentSchedule(c, r.parser, tgmodel.BackButton("/choose_other_student_action_back"))
+func (r *studentRouter) callbackOtherStudentSchedule(c bot.Context) error {
+	return studentSchedule(c, r.parser, "student", tgmodel.BackButton("/student/action/"+c.Param("schedule_id")))
 }

@@ -1,7 +1,9 @@
 package parser
 
 import (
+	"bot_for_modeus/pkg/modeus"
 	"context"
+	"errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -23,6 +25,9 @@ func (p *parser) parseToken(ctx context.Context, login, password string) (string
 	}
 	t, err := p.modeus.GetToken(login, password)
 	if err != nil {
+		if errors.Is(err, modeus.ErrIncorrectInputData) {
+			return "", ErrIncorrectLoginPassword
+		}
 		log.Errorf("%s/parseToken error get token from service: %s", parserServicePrefixLog, err)
 		return "", err
 	}

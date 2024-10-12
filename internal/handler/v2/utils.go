@@ -3,13 +3,13 @@ package v2
 import (
 	"bot_for_modeus/internal/model/tgmodel"
 	"bot_for_modeus/internal/parser"
+	"bot_for_modeus/internal/service"
 	"bot_for_modeus/pkg/bot"
 	"context"
 	"errors"
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -38,25 +38,32 @@ func findStudent(c bot.Context) (parser.Student, error) {
 	return students[num-1], nil
 }
 
-// Функция парсит данные из коллбэка с расписанием и оценками.
-// Паттерн ввода в формате тип/дата, например day/2006-01-02,
-// который в дальнейшем используется для получения расписания на 2 января 2006.
-// Ввод week/2006-01-02 будет использован для получения расписания на неделю, начинающуюся с этой даты.
-// Ввод grades/2006-01-02 будет использован для получения оценок на эту дату
-func parseCallbackDate(c bot.Context) (string, time.Time, error) {
+// Функция парсит данные из параметров пути
+// Паттерн ввода в формате тип/дата/scheduleId, например day/2006-01-02/aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa,
+// который в дальнейшем используется для получения расписания на 2 января 2006 для пользователя с uuid "aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa".
+// Ввод week/2006-01-02/uuid будет использован для получения расписания на неделю, начинающуюся с этой даты.
+// Ввод grades/2006-01-02/uuid будет использован для получения оценок на эту дату
+func parseCallbackDate(c bot.Context) (t string, day time.Time, scheduleId string, err error) {
 	cb := c.Update().CallbackQuery
 	if cb == nil {
-		return "", time.Time{}, ErrIncorrectInput
+		return "", time.Time{}, "", ErrIncorrectInput
 	}
-	data := strings.Split(cb.Data, "/")
-	if len(data) != 2 {
-		return "", time.Time{}, ErrIncorrectInput
+
+	var d string
+	t, d, scheduleId = c.Param("type"), c.Param("date"), c.Param("schedule_id")
+
+	if t == "" || d == "" || scheduleId == "" {
+		return "", time.Time{}, "", ErrIncorrectInput
 	}
-	t, err := time.Parse(time.DateOnly, data[1])
-	return data[0], t, err
+
+	day, err = time.Parse(time.DateOnly, d)
+	if err != nil {
+		return "", time.Time{}, "", ErrIncorrectInput
+	}
+	return
 }
 
-func studentDaySchedule(ctx context.Context, parser parser.Parser, now time.Time, scheduleId string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
+func studentDaySchedule(ctx context.Context, parser parser.Parser, now time.Time, scheduleId, prefix string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
 	schedule, err := parser.DaySchedule(ctx, scheduleId, now)
 	if err != nil {
 		return "", nil, err
@@ -69,10 +76,10 @@ func studentDaySchedule(ctx context.Context, parser parser.Parser, now time.Time
 	if len(schedule) == 0 {
 		text = fmt.Sprintf("На %s занятий нет!", now.Format("02.01"))
 	}
-	return text, tgmodel.DayScheduleButtons(now), nil
+	return text, tgmodel.DayScheduleButtons(now, scheduleId, prefix), nil
 }
 
-func studentWeekSchedule(ctx context.Context, parser parser.Parser, now time.Time, scheduleId string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
+func studentWeekSchedule(ctx context.Context, parser parser.Parser, now time.Time, scheduleId, prefix string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
 	schedule, err := parser.WeekSchedule(ctx, scheduleId, now)
 	if err != nil {
 		return "", nil, err
@@ -94,23 +101,19 @@ func studentWeekSchedule(ctx context.Context, parser parser.Parser, now time.Tim
 			text += "\n" + fmt.Sprintf(formatLesson, lesson.Time, lesson.Subject, lesson.Name, lesson.Type, lesson.AuditoriumNum, lesson.BuildingAddr, lesson.Lector) + "\n"
 		}
 	}
-	return text, tgmodel.WeekScheduleButtons(now), nil
+	return text, tgmodel.WeekScheduleButtons(now, scheduleId, prefix), nil
 }
 
-func studentSchedule(c bot.Context, p parser.Parser, backKB [][]tgbotapi.InlineKeyboardButton) error {
-	t, day, err := parseCallbackDate(c)
+func studentSchedule(c bot.Context, p parser.Parser, prefix string, backKB [][]tgbotapi.InlineKeyboardButton) error {
+	t, day, scheduleId, err := parseCallbackDate(c)
 	if err != nil {
 		if errors.Is(err, ErrIncorrectInput) {
 			return c.SendMessage(txtWarn)
 		}
 		return err
 	}
-	var scheduleId string
-	if err = c.GetData("schedule_id", &scheduleId); err != nil {
-		return err
-	}
-	var fullName string
-	if err = c.GetData("full_name", &fullName); err != nil {
+	fullName, err := getFullName(c, scheduleId)
+	if err != nil {
 		return err
 	}
 
@@ -120,18 +123,19 @@ func studentSchedule(c bot.Context, p parser.Parser, backKB [][]tgbotapi.InlineK
 	)
 	switch t {
 	case "day":
-		text, kb, err = studentDaySchedule(c.Context(), p, day, scheduleId)
+		text, kb, err = studentDaySchedule(c.Context(), p, day, scheduleId, prefix)
 		if err != nil {
 			return err
 		}
 	case "week":
-		text, kb, err = studentWeekSchedule(c.Context(), p, day, scheduleId)
+		text, kb, err = studentWeekSchedule(c.Context(), p, day, scheduleId, prefix)
 		if err != nil {
 			return err
 		}
 	default:
 		return errors.New("studentSchedule unexpected error")
 	}
+
 	text = fmt.Sprintf(formatFullName, fullName) + text
 	if backKB != nil {
 		kb = append(kb, backKB...)
@@ -139,15 +143,56 @@ func studentSchedule(c bot.Context, p parser.Parser, backKB [][]tgbotapi.InlineK
 	return c.EditMessageWithInlineKB(text, kb)
 }
 
-func studentCurrentSchedule(c bot.Context, p parser.Parser, scheduleId string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
-	switch c.Text() {
-	case "day_schedule":
-		return studentDaySchedule(c.Context(), p, time.Now(), scheduleId)
-	case "week_schedule":
-		return studentWeekSchedule(c.Context(), p, time.Now(), scheduleId)
-	default:
-		return "Ой! Произошла ошибка при сборе данных...", nil, nil
+// Отдельно сохраняем все когда-либо использованные пользователем ФИО.
+// К сожалению, телеграм имеет ограничение на размер callback data (64 байта) (сделали хотя бы 1kb!!!!).
+// Поэтому идея сделать коллбэк на расписание в формате "тип/дата/scheduleId/ФИО" обернулась крахом.
+// Было принято решение scheduleId оставить, а ФИО вынести в общие данные
+func addFullName(c bot.Context, scheduleId, fullName string) error {
+	return c.SetCommonData("full_name:"+scheduleId, fullName, 0)
+}
+
+func getFullName(c bot.Context, scheduleId string) (string, error) {
+	var fullName string
+	if err := c.GetCommonData("full_name:"+scheduleId, &fullName); err != nil {
+		return "", err
 	}
+	return fullName, nil
+}
+
+func lookupGI(c bot.Context, u service.User) (gi parser.GradesInput, err error) {
+	err = c.GetData("grades_input", &gi)
+	if err == nil {
+		if gi.Password != "" {
+			gi.Password, err = u.Decrypt(gi.Password)
+			if err != nil {
+				return parser.GradesInput{}, err
+			}
+		}
+		return
+	}
+	if !errors.Is(err, bot.ErrKeyNotExists) {
+		return parser.GradesInput{}, err
+	}
+
+	user, err := u.Find(c.Context(), c.UserId())
+	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			_ = c.SendMessage(txtUserNotFound)
+			return parser.GradesInput{}, err
+		}
+		return parser.GradesInput{}, err
+	}
+
+	gi = parser.GradesInput{
+		Login:      user.Login,
+		Password:   user.Password,
+		ScheduleId: user.ScheduleId,
+		GradesId:   user.GradesId,
+	}
+	// Тут необязательно возвращать ошибку, поскольку grades input у нас есть,
+	// однако нагрузка на бд возрастет с количеством несохраненных gi в кэш
+	_ = c.SetData("grades_input", gi)
+	return
 }
 
 // От модеуса даты приходят в неудобном для чтения виде, поэтому мы приводим их в нормальный вариант
