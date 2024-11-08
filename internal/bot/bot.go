@@ -3,7 +3,6 @@ package bot
 import (
 	"bot_for_modeus/config"
 	v2 "bot_for_modeus/internal/handler/v2"
-	"bot_for_modeus/internal/model/tgmodel"
 	"bot_for_modeus/internal/repo"
 	"bot_for_modeus/internal/service"
 	"bot_for_modeus/pkg/bot"
@@ -54,7 +53,8 @@ func Run() {
 		Ctx:       ctx,
 	}
 	// tg client
-	b, err := bot.NewBot(s, bot.SetCommands(tgmodel.UICommands), bot.RedisStorage(ctx, rdb.Conn()), bot.SetLogger(logger))
+	//b, err := bot.NewBot(s, bot.SetCommands(tgmodel.UICommands), bot.RedisStorage(ctx, rdb.Conn()), bot.SetLogger(logger))
+	b, err := bot.NewBot(s, bot.RedisStorage(ctx, rdb.Conn()), bot.SetLogger(logger))
 	if err != nil {
 		log.Fatalf("tg client init error: %s", err)
 	}

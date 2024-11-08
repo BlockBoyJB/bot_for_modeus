@@ -89,9 +89,6 @@ func (r *scheduleRouter) cmdWeekSchedule(c bot.Context) error {
 func (r *scheduleRouter) callbackUserSchedule(c bot.Context) error {
 	t, day, _, err := parseCallbackDate(c)
 	if err != nil {
-		if errors.Is(err, ErrIncorrectInput) {
-			return c.SendMessage(txtWarn)
-		}
 		return err
 	}
 
@@ -151,6 +148,7 @@ func (r *scheduleRouter) cmdGrades(c bot.Context) error {
 
 	semester, err := r.parser.FindCurrentSemester(c.Context(), gi)
 	if err != nil {
+		// TODO вынести ошибку. Потому что это надо проверять во всех оценках
 		if errors.Is(err, parser.ErrIncorrectLoginPassword) {
 			return c.SendMessage(txtIncorrectLoginPass)
 		}

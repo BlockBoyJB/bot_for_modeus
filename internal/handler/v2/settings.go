@@ -54,6 +54,9 @@ func (r *settingsRouter) stateAddLoginPassword(c bot.Context) error {
 		return c.SendMessage(txtIncorrectLoginPassInput)
 	}
 
+	if err := c.DelData("grades_input"); err != nil { // сначала важно удалить старые данные из кэша
+		return err
+	}
 	err := r.user.UpdateLoginPassword(c.Context(), service.UserLoginPasswordInput{
 		UserId:   c.UserId(),
 		Login:    data[0],
@@ -63,15 +66,9 @@ func (r *settingsRouter) stateAddLoginPassword(c bot.Context) error {
 		if errors.Is(err, service.ErrUserIncorrectLogin) {
 			return c.SendMessage(txtIncorrectLoginPassInput)
 		}
-		if errors.Is(err, service.ErrUserNotFound) {
-			return c.SendMessage(txtUserNotFound)
-		}
 		return err
 	}
 	_ = c.DelData("state")
-	if err = c.DelData("grades_input"); err != nil {
-		return err
-	}
 	_, _ = lookupGI(c, r.user) // перезаписываем grades_input в кэше
 	return c.SendMessageWithReplyKB("Логин и пароль успешно добавлены!", tgmodel.RowCommands)
 }

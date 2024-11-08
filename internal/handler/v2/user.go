@@ -51,12 +51,11 @@ func (r *userRouter) callbackStartBack(c bot.Context) error {
 }
 
 func (r *userRouter) stateInputFullName(c bot.Context) error {
-	// тут находим всех пользователей с введенным фио
+	if len(c.Text()) > 200 {
+		return ErrIncorrectInput
+	}
 	students, err := r.parser.FindStudents(c.Context(), c.Text())
 	if err != nil {
-		if errors.Is(err, parser.ErrStudentsNotFound) {
-			return c.SendMessage(fmt.Sprintf(txtStudentNotFound, c.Text()))
-		}
 		return err
 	}
 	if err = c.SetData("students", students); err != nil {
@@ -74,9 +73,6 @@ func (r *userRouter) stateInputFullName(c bot.Context) error {
 func (r *userRouter) stateChooseStudent(c bot.Context) error {
 	s, err := findStudent(c)
 	if err != nil {
-		if errors.Is(err, ErrIncorrectInput) {
-			return c.SendMessage(txtWarn)
-		}
 		return err
 	}
 
@@ -89,9 +85,13 @@ func (r *userRouter) stateChooseStudent(c bot.Context) error {
 	if err = r.user.Create(c.Context(), input); err != nil {
 		// если пользователь уже существует, то просто обновляем информацию о нем
 		if errors.Is(err, service.ErrUserAlreadyExists) {
+			if e := c.DelData("grades_input"); e != nil {
+				return e
+			}
 			if e := r.user.UpdateInfo(c.Context(), input); e != nil {
 				return e
 			}
+			_, _ = lookupGI(c, r.user) // перезаписываем grades_input в кэше
 			return c.EditMessage("Информация о пользователе успешно обновлена!")
 		}
 		return err
@@ -129,9 +129,6 @@ func (r *userRouter) stateConfirmDelete(c bot.Context) error {
 	}
 	u, err := r.user.Find(c.Context(), c.UserId())
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			return c.EditMessage(txtUserNotFound)
-		}
 		return err
 	}
 	if u.Login != "" {

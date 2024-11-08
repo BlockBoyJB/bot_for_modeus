@@ -112,7 +112,7 @@ func studentSchedule(c bot.Context, p parser.Parser, prefix string, backKB [][]t
 		}
 		return err
 	}
-	fullName, err := getFullName(c, scheduleId)
+	fullName, err := getFullName(c, p, scheduleId)
 	if err != nil {
 		return err
 	}
@@ -147,16 +147,16 @@ func studentSchedule(c bot.Context, p parser.Parser, prefix string, backKB [][]t
 // К сожалению, телеграм имеет ограничение на размер callback data (64 байта) (сделали хотя бы 1kb!!!!).
 // Поэтому идея сделать коллбэк на расписание в формате "тип/дата/scheduleId/ФИО" обернулась крахом.
 // Было принято решение scheduleId оставить, а ФИО вынести в общие данные
-func addFullName(c bot.Context, scheduleId, fullName string) error {
-	return c.SetCommonData("full_name:"+scheduleId, fullName, 0)
-}
-
-func getFullName(c bot.Context, scheduleId string) (string, error) {
-	var fullName string
-	if err := c.GetCommonData("full_name:"+scheduleId, &fullName); err != nil {
+func getFullName(c bot.Context, p parser.Parser, scheduleId string) (fullName string, err error) {
+	if err = c.GetCommonData("full_name:"+scheduleId, &fullName); err == nil {
+		return
+	}
+	s, err := p.FindStudentById(c.Context(), scheduleId)
+	if err != nil {
 		return "", err
 	}
-	return fullName, nil
+	_ = c.SetCommonData("full_name:"+s.ScheduleId, fullName, 0)
+	return s.FullName, nil
 }
 
 func lookupGI(c bot.Context, u service.User) (gi parser.GradesInput, err error) {
@@ -193,6 +193,18 @@ func lookupGI(c bot.Context, u service.User) (gi parser.GradesInput, err error) 
 	// однако нагрузка на бд возрастет с количеством несохраненных gi в кэш
 	_ = c.SetData("grades_input", gi)
 	return
+}
+
+func lookupFriends(c bot.Context, u service.User) (friends map[string]string, err error) {
+	if err = c.GetData("friends", &friends); err == nil {
+		return
+	}
+	user, err := u.Find(c.Context(), c.UserId())
+	if err != nil {
+		return nil, err
+	}
+	_ = c.SetData("friends", user.Friends)
+	return user.Friends, nil
 }
 
 // От модеуса даты приходят в неудобном для чтения виде, поэтому мы приводим их в нормальный вариант

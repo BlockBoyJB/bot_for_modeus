@@ -4,7 +4,6 @@ import (
 	"bot_for_modeus/internal/model/tgmodel"
 	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/pkg/bot"
-	"errors"
 	"fmt"
 	"strconv"
 )
@@ -44,11 +43,11 @@ func (r *studentRouter) callbackOtherStudentBack(c bot.Context) error {
 }
 
 func (r *studentRouter) stateInputOtherStudent(c bot.Context) error {
+	if len(c.Text()) > 200 {
+		return ErrIncorrectInput
+	}
 	students, err := r.parser.FindStudents(c.Context(), c.Text())
 	if err != nil {
-		if errors.Is(err, parser.ErrStudentsNotFound) {
-			return c.SendMessage(fmt.Sprintf(txtStudentNotFound, c.Text()))
-		}
 		return err
 	}
 	if err = c.SetData("other_students", students); err != nil {
@@ -91,16 +90,12 @@ func (r *studentRouter) stateChooseOtherStudent(c bot.Context) error {
 	}
 	s := students[num-1]
 
-	if err = addFullName(c, s.ScheduleId, s.FullName); err != nil {
-		return err
-	}
-
 	return c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseOtherStudentAction, s.FullName), tgmodel.OtherStudentButtons(s.ScheduleId))
 }
 
 func (r *studentRouter) callbackChooseOtherStudentActionBack(c bot.Context) error {
 	scheduleId := c.Param("schedule_id")
-	fullName, err := getFullName(c, scheduleId)
+	fullName, err := getFullName(c, r.parser, scheduleId)
 	if err != nil {
 		return err
 	}

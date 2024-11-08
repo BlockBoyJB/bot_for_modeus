@@ -19,6 +19,12 @@ func ChooseFriendAction(scheduleId string) [][]tgbotapi.InlineKeyboardButton {
 
 func FriendsButtons(friends map[string]string) [][]tgbotapi.InlineKeyboardButton {
 	// friends: ключ - personId (SubjectId), значение - ФИО
-	buttons := [][]tgbotapi.InlineKeyboardButton{{tgbotapi.NewInlineKeyboardButtonData("Добавить друга", "/add_friend")}}
-	return append(buttons, InlineRowButtons(friends, 1)...)
+	buttons := make([][]tgbotapi.InlineKeyboardButton, 0, len(friends))
+
+	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{tgbotapi.NewInlineKeyboardButtonData("Добавить друга", "/add_friend")})
+
+	for scheduleId, fullName := range friends {
+		buttons = append(buttons, []tgbotapi.InlineKeyboardButton{tgbotapi.NewInlineKeyboardButtonData(fullName, "/friends/choose/"+scheduleId)})
+	}
+	return buttons
 }

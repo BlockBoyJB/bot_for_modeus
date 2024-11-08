@@ -5,7 +5,6 @@ import (
 	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/internal/service"
 	"bot_for_modeus/pkg/bot"
-	"errors"
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -24,7 +23,7 @@ func newFriendsRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 	b.Command("/friends", r.cmdFriends)
 	b.Message(tgmodel.FriendsButton, r.cmdFriends)
 	b.Callback("/choose_friend_back", r.callbackChooseFriendBack)
-	b.State(stateChooseFriend, r.stateChooseFriend)
+	b.AddTree(bot.OnCallback, "/friends/choose/:schedule_id", r.callbackChooseFriend)
 	b.AddTree(bot.OnCallback, "/friends/action/:schedule_id", r.callbackChooseFriendActionBack)
 	b.AddTree(bot.OnCallback, "/friends/delete/:schedule_id", r.callbackDeleteFriend)
 	b.AddTree(bot.OnCallback, "/friends/:type/:date/:schedule_id", r.callbackFriendsSchedule)
@@ -35,59 +34,42 @@ func newFriendsRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 }
 
 func (r *friendsRouter) cmdFriends(c bot.Context) error {
-	user, err := r.user.Find(c.Context(), c.UserId())
+	friends, err := lookupFriends(c, r.user)
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			return c.SendMessage(txtUserNotFound)
-		}
-		return err
-	}
-	text := txtFriends
-	if len(user.Friends) == 0 {
-		text = "Ой! Кажется, у Вас ни одного сохраненного друга!"
-	}
-
-	if err = c.SetData("friends", user.Friends); err != nil {
-		return err
-	}
-
-	if err = c.SendMessageWithInlineKB(text, tgmodel.FriendsButtons(user.Friends)); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseFriend)
-}
-
-func (r *friendsRouter) callbackChooseFriendBack(c bot.Context) error {
-	var friends map[string]string
-	if err := c.GetData("friends", &friends); err != nil {
 		return err
 	}
 	text := txtFriends
 	if len(friends) == 0 {
 		text = "Ой! Кажется, у Вас ни одного сохраненного друга!"
 	}
-	if err := c.EditMessageWithInlineKB(text, tgmodel.FriendsButtons(friends)); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseFriend)
+
+	return c.SendMessageWithInlineKB(text, tgmodel.FriendsButtons(friends))
 }
 
-func (r *friendsRouter) stateChooseFriend(c bot.Context) error {
-	var friends map[string]string
-	if err := c.GetData("friends", &friends); err != nil {
+func (r *friendsRouter) callbackChooseFriendBack(c bot.Context) error {
+	friends, err := lookupFriends(c, r.user)
+	if err != nil {
 		return err
 	}
-	fullName, ok := friends[c.Text()]
-	if !ok { // Париться с проверкой, что это коллбэк нет смысла. Если захочет ввести свой id сам, пусть делает. Главное чтобы гадости не писали)
-		return c.SendMessage(txtWarn)
+	text := txtFriends
+	if len(friends) == 0 {
+		text = "Ой! Кажется, у Вас ни одного сохраненного друга!"
 	}
+	return c.EditMessageWithInlineKB(text, tgmodel.FriendsButtons(friends))
+}
 
-	return c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseFriendAction, fullName), tgmodel.ChooseFriendAction(c.Text()))
+func (r *friendsRouter) callbackChooseFriend(c bot.Context) error {
+	scheduleId := c.Param("schedule_id")
+	fullName, err := getFullName(c, r.parser, scheduleId)
+	if err != nil {
+		return err
+	}
+	return c.EditMessageWithInlineKB(fmt.Sprintf(txtChooseFriendAction, fullName), tgmodel.ChooseFriendAction(scheduleId))
 }
 
 func (r *friendsRouter) callbackChooseFriendActionBack(c bot.Context) error {
 	scheduleId := c.Param("schedule_id")
-	fullName, err := getFullName(c, scheduleId)
+	fullName, err := getFullName(c, r.parser, scheduleId)
 	if err != nil {
 		return err
 	}
@@ -130,11 +112,11 @@ func (r *friendsRouter) callbackAddFriend(c bot.Context) error {
 }
 
 func (r *friendsRouter) stateAddFriend(c bot.Context) error {
+	if len(c.Text()) > 200 {
+		return ErrIncorrectInput
+	}
 	students, err := r.parser.FindStudents(c.Context(), c.Text())
 	if err != nil {
-		if errors.Is(err, parser.ErrStudentsNotFound) {
-			return c.SendMessage(fmt.Sprintf(txtStudentNotFound, c.Text()))
-		}
 		return err
 	}
 	if err = c.SetData("students", students); err != nil {
@@ -152,9 +134,6 @@ func (r *friendsRouter) stateAddFriend(c bot.Context) error {
 func (r *friendsRouter) stateChooseFindFriend(c bot.Context) error {
 	s, err := findStudent(c)
 	if err != nil {
-		if errors.Is(err, ErrIncorrectInput) {
-			return c.SendMessage(txtWarn)
-		}
 		return err
 	}
 	if err = c.DelData("students"); err != nil {
@@ -175,9 +154,6 @@ func (r *friendsRouter) stateChooseFindFriend(c bot.Context) error {
 	}
 	friends[s.ScheduleId] = s.FullName
 	if err = c.SetData("friends", friends); err != nil {
-		return err
-	}
-	if err = addFullName(c, s.ScheduleId, s.FullName); err != nil {
 		return err
 	}
 

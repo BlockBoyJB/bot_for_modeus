@@ -6,7 +6,8 @@ import (
 )
 
 func NewHandler(b *bot.Bot, services *service.Services) {
-	b.Use(recoverMiddleware, errorMiddleware, loggingMiddleware)
+	b.Use(recoverMiddleware)
+	b.Use(loggingMiddleware, errorMiddleware)
 
 	b.Command("/test", test)
 
