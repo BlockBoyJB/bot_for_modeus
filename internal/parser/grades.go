@@ -78,7 +78,9 @@ func (p *parser) SemesterTotalGrades(ctx context.Context, input GradesInput, sem
 		CurriculumPlanId:            semester.CurriculumPlanId,
 	})
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/SemesterTotalGrades modeus error: %s", parserServicePrefixLog, e)
 			return nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/SemesterTotalGrades error find semester subjects: %s", parserServicePrefixLog, err)
@@ -104,17 +106,20 @@ func (p *parser) SemesterTotalGrades(ctx context.Context, input GradesInput, sem
 	}
 
 	semesterResults, err := p.modeus.CoursesTotalResults(token, modeus.SecondaryGradesRequest{
-		CourseUnitRealizationId: requestSubjects,
-		AcademicCourseId:        []string{},
-		LessonId:                []string{},
-		PersonId:                input.ScheduleId,
-		AprId:                   semester.Id,
-		AcademicPeriodStartDate: semester.StartDate,
-		AcademicPeriodEndDate:   semester.EndDate,
-		StudentId:               input.GradesId,
+		CourseUnitRealizationId:     requestSubjects,
+		AcademicCourseId:            []string{},
+		LessonId:                    []string{},
+		LessonRealizationTemplateId: []string{},
+		PersonId:                    input.ScheduleId,
+		AprId:                       semester.Id,
+		AcademicPeriodStartDate:     semester.StartDate,
+		AcademicPeriodEndDate:       semester.EndDate,
+		StudentId:                   input.GradesId,
 	})
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/SemesterTotalGrades modeus error: %s", parserServicePrefixLog, e)
 			return nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/SemesterTotalGrades error find semester total results: %s", parserServicePrefixLog, err)
@@ -163,7 +168,9 @@ func (p *parser) Ratings(ctx context.Context, input GradesInput) (string, map[in
 	}
 	semesters, err := p.modeus.FindAPR(token, input.GradesId)
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/Ratings modeus error: %s", parserServicePrefixLog, e)
 			return "", nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/Ratings error find all user semesters: %s", parserServicePrefixLog, err)
@@ -180,7 +187,9 @@ func (p *parser) Ratings(ctx context.Context, input GradesInput) (string, map[in
 		AprId:     requestSem,
 	})
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/Ratings modeus error: %s", parserServicePrefixLog, e)
 			return "", nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/Ratings error find student ratings: %s", parserServicePrefixLog, err)
@@ -231,7 +240,9 @@ func (p *parser) DayGrades(ctx context.Context, day time.Time, input GradesInput
 		AttendeePersonId: []string{input.ScheduleId},
 	})
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/DayGrades modeus error: %s", parserServicePrefixLog, e)
 			return nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/DayGrades error find user schedule: %s", parserServicePrefixLog, err)
@@ -248,7 +259,9 @@ func (p *parser) DayGrades(ctx context.Context, day time.Time, input GradesInput
 			CourseUnitRealizationId: event.Links.CourseUnitRealization.Href[1:],
 		})
 		if e != nil {
-			if errors.Is(err, modeus.ErrModeusUnavailable) {
+			var er *modeus.ErrModeusUnavailable
+			if errors.As(e, &er) {
+				log.Errorf("%s/DayGrades modeus error: %s", parserServicePrefixLog, er)
 				return nil, ErrModeusUnavailable
 			}
 			log.Errorf("%s/DayGrades error find lesson grades: %s", parserServicePrefixLog, e)
@@ -276,7 +289,12 @@ func (p *parser) FindCurrentSemester(ctx context.Context, input GradesInput) (Se
 
 	s, err := p.modeus.FindCurrentAPR(token, input.GradesId)
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		//if errors.Is(err, modeus.ErrModeusUnavailable) {
+		//	return Semester{}, ErrModeusUnavailable
+		//}
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/FindCurrentSemester modeus error: %s", parserServicePrefixLog, e)
 			return Semester{}, ErrModeusUnavailable
 		}
 		log.Errorf("%s/FindCurrentSemester error find current user semester: %s", parserServicePrefixLog, err)
@@ -301,7 +319,9 @@ func (p *parser) FindAllSemesters(ctx context.Context, input GradesInput) (map[s
 
 	semesters, err := p.modeus.FindAPR(token, input.GradesId)
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/FindAllSemesters modeus error: %s", parserServicePrefixLog, e)
 			return nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/FindAllSemesters erorr find user semesters: %s", parserServicePrefixLog, err)
@@ -340,7 +360,9 @@ func (p *parser) FindSemesterSubjects(ctx context.Context, input GradesInput, se
 		CurriculumPlanId:            semester.CurriculumPlanId,
 	})
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/FindSemesterSubjects modeus error: %s", parserServicePrefixLog, e)
 			return nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/FindSemesterSubjects error find subjects from modeus: %s", parserServicePrefixLog, err)
@@ -386,7 +408,9 @@ func (p *parser) SubjectDetailedInfo(ctx context.Context, input GradesInput, sem
 		CurriculumPlanId:            semester.CurriculumPlanId,
 	})
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/SubjectDetailedInfo modeus error: %s", parserServicePrefixLog, e)
 			return nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/SubjectDetailedInfo error find semester subjects: %s", parserServicePrefixLog, err)
@@ -429,17 +453,20 @@ func (p *parser) SubjectDetailedInfo(ctx context.Context, input GradesInput, sem
 	}
 
 	semesterResults, err := p.modeus.CoursesTotalResults(token, modeus.SecondaryGradesRequest{
-		CourseUnitRealizationId: []string{subjectId},
-		AcademicCourseId:        []string{},
-		LessonId:                requestLesson,
-		PersonId:                input.ScheduleId,
-		AprId:                   semester.Id,
-		AcademicPeriodStartDate: semester.StartDate,
-		AcademicPeriodEndDate:   semester.EndDate,
-		StudentId:               input.GradesId,
+		CourseUnitRealizationId:     []string{subjectId},
+		AcademicCourseId:            []string{},
+		LessonId:                    requestLesson,
+		LessonRealizationTemplateId: []string{},
+		PersonId:                    input.ScheduleId,
+		AprId:                       semester.Id,
+		AcademicPeriodStartDate:     semester.StartDate,
+		AcademicPeriodEndDate:       semester.EndDate,
+		StudentId:                   input.GradesId,
 	})
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/SubjectDetailedInfo modeus error: %s", parserServicePrefixLog, e)
 			return nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/SubjectDetailedInfo error find semester total results: %s", parserServicePrefixLog, err)

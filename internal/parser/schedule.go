@@ -75,7 +75,9 @@ func (p *parser) parseSchedule(ctx context.Context, input modeus.ScheduleRequest
 	}
 	schedule, err := p.modeus.Schedule(token, input)
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/parseSchedule modeus error: %s", parserServicePrefixLog, e)
 			return nil, ErrModeusUnavailable
 		}
 		log.Errorf("%s/parseSchedule error find user schedule from modeus: %s", parserServicePrefixLog, err)

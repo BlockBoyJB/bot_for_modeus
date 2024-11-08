@@ -3,6 +3,7 @@ package modeus
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 )
@@ -67,8 +68,40 @@ func (s *modeus) makeRequest(token, method, uri string, v any) (*http.Response, 
 	r.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(r)
-	if err != nil || resp.StatusCode > 300 {
-		return nil, ErrModeusUnavailable
+	//body, err = io.ReadAll(resp.Body)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//fmt.Println(string(body))
+	//if err != nil || resp.StatusCode > 300 {
+	//	return nil, &ErrModeusUnavailable{}
+	//}
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		return nil, handleModeusErr(resp)
+	}
+	if err != nil {
+		return nil, err
 	}
 	return resp, nil
+}
+
+func handleModeusErr(r *http.Response) (err *ErrModeusUnavailable) {
+	b, e := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	if e != nil {
+		return &ErrModeusUnavailable{
+			StatusCode: r.StatusCode,
+			Timestamp:  time.Now().String(),
+		}
+	}
+	if e = json.Unmarshal(b, &err); e != nil {
+		return &ErrModeusUnavailable{
+			StatusCode: r.StatusCode,
+			Timestamp:  time.Now().String(),
+		}
+	}
+	return
 }

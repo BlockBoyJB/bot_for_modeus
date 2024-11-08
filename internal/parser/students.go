@@ -25,7 +25,9 @@ func (p *parser) FindStudents(ctx context.Context, fullName string) ([]Student, 
 
 	response, err := p.modeus.FindStudents(token, fullName)
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/FindStudents modeus error: %s", parserServicePrefixLog, e)
 			return nil, ErrModeusUnavailable
 		}
 		if errors.Is(err, modeus.ErrStudentsNotFound) {
@@ -95,7 +97,9 @@ func (p *parser) FindStudentById(ctx context.Context, scheduleId string) (Studen
 	}
 	student, err := p.modeus.FindStudentById(token, scheduleId)
 	if err != nil {
-		if errors.Is(err, modeus.ErrModeusUnavailable) {
+		var e *modeus.ErrModeusUnavailable
+		if errors.As(err, &e) {
+			log.Errorf("%s/FindStudentById modeus error: %s", parserServicePrefixLog, e)
 			return Student{}, ErrModeusUnavailable
 		}
 		log.Errorf("%s/FindStudentById error find student: %s", parserServicePrefixLog, err)

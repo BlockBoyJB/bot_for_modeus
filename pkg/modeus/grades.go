@@ -138,14 +138,15 @@ type SecondaryGradesResponse struct {
 }
 
 type SecondaryGradesRequest struct {
-	CourseUnitRealizationId []string `json:"courseUnitRealizationId"` // тут указываем CourseUnit.Id
-	AcademicCourseId        []string `json:"academicCourseId"`        // TODO поэкспериментировать
-	LessonId                []string `json:"lessonId"`                // Для детального просмотра оценок (посещаемость + баллы за каждую пару)
-	PersonId                string   `json:"personId"`
-	AprId                   string   `json:"aprId"`
-	AcademicPeriodStartDate string   `json:"academicPeriodStartDate"`
-	AcademicPeriodEndDate   string   `json:"academicPeriodEndDate"`
-	StudentId               string   `json:"studentId"`
+	CourseUnitRealizationId     []string `json:"courseUnitRealizationId"` // тут указываем CourseUnit.Id
+	AcademicCourseId            []string `json:"academicCourseId"`        // TODO поэкспериментировать
+	LessonId                    []string `json:"lessonId"`                // Для детального просмотра оценок (посещаемость + баллы за каждую пару)
+	LessonRealizationTemplateId []string `json:"lessonRealizationTemplateId"`
+	PersonId                    string   `json:"personId"`
+	AprId                       string   `json:"aprId"`
+	AcademicPeriodStartDate     string   `json:"academicPeriodStartDate"`
+	AcademicPeriodEndDate       string   `json:"academicPeriodEndDate"`
+	StudentId                   string   `json:"studentId"`
 }
 
 type APRealization struct {
