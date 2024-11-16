@@ -114,5 +114,7 @@ func (p *parser) FindStudentById(ctx context.Context, scheduleId string) (Studen
 		FlowCode:         s.FlowCode,
 		SpecialtyName:    s.SpecialtyName,
 		SpecialtyProfile: s.SpecialtyProfile,
+		ScheduleId:       s.PersonId,
+		GradesId:         s.Id,
 	}, nil
 }

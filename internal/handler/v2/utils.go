@@ -155,7 +155,7 @@ func getFullName(c bot.Context, p parser.Parser, scheduleId string) (fullName st
 	if err != nil {
 		return "", err
 	}
-	_ = c.SetCommonData("full_name:"+s.ScheduleId, fullName, 0)
+	_ = c.SetCommonData("full_name:"+s.ScheduleId, s.FullName, 0)
 	return s.FullName, nil
 }
 
