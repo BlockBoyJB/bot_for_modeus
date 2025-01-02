@@ -39,50 +39,13 @@ func (p *parser) FindStudents(ctx context.Context, fullName string) ([]Student, 
 
 	var result []Student
 	for _, person := range response.Embedded.Persons {
+		// Минимальная информация о студенте/преподавателе, необходимая для работы
 		student := Student{
-			FullName: person.FullName,
+			FullName:   person.FullName,
+			ScheduleId: person.Id,
 		}
-		var ok bool
-
-		for _, s := range response.Embedded.Students {
-			if s.PersonId == person.Id {
-				student = Student{
-					FullName:         student.FullName,
-					FlowCode:         s.FlowCode,
-					SpecialtyName:    s.SpecialtyName,
-					SpecialtyProfile: s.SpecialtyProfile,
-					ScheduleId:       s.PersonId,
-					GradesId:         s.Id,
-				}
-				if s.LearningEndDate.Unix() > 0 && s.LearningStartDate.Before(time.Now()) {
-					student.SpecialtyProfile = "<i>Не является студентом на данный момент</i>" // Костыль, но сойдет
-				}
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			// Есть такой вариант, что пользователь ввел ФИО преподавателя,
-			// а его данные находятся в другом списке в ответе
-			for _, e := range response.Embedded.Employees {
-				// Проверка на DateOut == "" нужна, потому что в ответе приходят разные занимаемые должности в рамках одного преподавателя.
-				// Т.е есть разные периоды работы, в которых разный GroupName. Нам нужен тот, который не закончился
-				if e.PersonId == person.Id && e.DateOut == "" {
-					student = Student{
-						FullName:         student.FullName,
-						SpecialtyName:    "Преподаватель", // Вообще-то, не совсем понятно, что это преподаватель (в ответе массив называется "сотрудники").
-						SpecialtyProfile: e.GroupName,
-						ScheduleId:       e.PersonId,
-						GradesId:         e.Id,
-					}
-					ok = true
-					break
-				}
-			}
-		}
-		if ok {
-			result = append(result, student)
-		}
+		fillStudent(&response, &student)
+		result = append(result, student)
 	}
 	if len(result) == 0 {
 		return nil, ErrStudentsNotFound
@@ -95,7 +58,7 @@ func (p *parser) FindStudentById(ctx context.Context, scheduleId string) (Studen
 	if err != nil {
 		return Student{}, err
 	}
-	student, err := p.modeus.FindStudentById(token, scheduleId)
+	response, err := p.modeus.FindStudentById(token, scheduleId)
 	if err != nil {
 		var e *modeus.ErrModeusUnavailable
 		if errors.As(err, &e) {
@@ -105,16 +68,46 @@ func (p *parser) FindStudentById(ctx context.Context, scheduleId string) (Studen
 		log.Errorf("%s/FindStudentById error find student: %s", parserServicePrefixLog, err)
 		return Student{}, err
 	}
-	if student.Page.TotalElements != 1 {
+	if response.Page.TotalElements != 1 {
 		return Student{}, errors.New("students with specified id more than 1")
 	}
-	s := student.Embedded.Students[0]
-	return Student{
-		FullName:         student.Embedded.Persons[0].FullName,
-		FlowCode:         s.FlowCode,
-		SpecialtyName:    s.SpecialtyName,
-		SpecialtyProfile: s.SpecialtyProfile,
-		ScheduleId:       s.PersonId,
-		GradesId:         s.Id,
-	}, nil
+
+	// Минимальная информация о студенте/преподавателе, необходимая для работы
+	student := Student{
+		FullName:   response.Embedded.Persons[0].FullName,
+		ScheduleId: scheduleId,
+	}
+
+	fillStudent(&response, &student)
+	return student, nil
+}
+
+// Функция, которая заполняет информацию о студенте из StudentResponse
+// Предполагается, что ФИО и scheduleId (Person Id) уже имеются
+func fillStudent(response *modeus.StudentResponse, student *Student) {
+	for _, s := range response.Embedded.Students {
+		if s.PersonId == student.ScheduleId {
+			student.FlowCode = s.FlowCode
+			student.SpecialtyName = s.SpecialtyName
+			student.SpecialtyProfile = s.SpecialtyProfile
+			student.ScheduleId = s.PersonId
+			student.GradesId = s.Id
+
+			if s.LearningEndDate.Unix() > 0 && s.LearningStartDate.Before(time.Now()) {
+				student.SpecialtyProfile = "<i>Не является студентом на данный момент</i>" // Костыль, но сойдет
+			}
+			return
+		}
+	}
+	for _, e := range response.Embedded.Employees {
+		if e.PersonId == student.ScheduleId && e.DateOut == "" {
+			// Проверка на DateOut == "" нужна, потому что в ответе приходят разные занимаемые должности в рамках одного преподавателя.
+			// Т.е есть разные периоды работы, в которых разный GroupName. Нам нужен тот, который не закончился
+			student.SpecialtyName = "Преподаватель" // Вообще-то, не совсем понятно, что это преподаватель (в ответе массив называется "сотрудники").
+			student.SpecialtyProfile = e.GroupName
+			student.ScheduleId = e.PersonId
+			student.GradesId = e.Id
+			return
+		}
+	}
 }
