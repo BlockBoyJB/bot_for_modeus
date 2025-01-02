@@ -15,7 +15,7 @@ func loggingMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
 		u := c.Update()
 		if err := next(c); err != nil {
 			log.Errorf("Message from %d is handled with error: %s", u.SentFrom().ID, err)
-			return err
+			return c.SendMessage(txtError)
 		}
 		return nil
 	}
