@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"strings"
 	"time"
 )
 
@@ -44,26 +45,18 @@ func (p *parser) WeekSchedule(ctx context.Context, scheduleId string, now time.T
 	if err != nil {
 		return nil, err
 	}
-	// Если расписания ни на один день нет, то просто заполняем мапу пустыми значениями.
+	result := make(map[int][]Lesson, 6)
+
 	if len(schedule) == 0 {
-		r := make(map[int][]Lesson)
-		for i := 1; i < 7; i++ {
-			r[i] = []Lesson{}
-		}
-		return r, nil
+		return result, nil
 	}
-	result := make(map[int][]Lesson)
 
-	currDay := 1
-
-	for i := 0; i < len(schedule)-1; i++ {
-		result[currDay] = append(result[currDay], schedule[i])
-		// слайс отсортированный, поэтому разделять расписание по дням можно таким способом
-		if schedule[i+1].start.Weekday() > schedule[i].start.Weekday() {
-			currDay = int(schedule[i+1].start.Weekday())
-		}
+	// Идем циклом по всему расписанию (оно отсортированное).
+	// Заполняем мапу с недельным расписанием, вычисляя ключ для каждого занятия через time.Time{}.Weekday() (Понедельник начинается с 1)
+	for _, l := range schedule {
+		key := int(l.start.Weekday())
+		result[key] = append(result[key], l) // можем так делать, потому что занятия идут друг за другом по времени (порядок не будет нарушен)
 	}
-	result[currDay] = append(result[currDay], schedule[len(schedule)-1])
 	return result, nil
 }
 
@@ -176,24 +169,35 @@ func parseLessonTime(event any) string {
 	return fmt.Sprintf("%s - %s", start.Format("15:04"), end.Format("15:04"))
 }
 
+// Находит всех преподавателей для занятия (их может быть несколько, особенно на повторных аттестациях)
+// Результатом функции будут ФИО преподавателей через запятую (ФИО, ФИО, ...)
 func parseLessonLector(event modeus.Event, response modeus.ScheduleResponse) string {
 	eventId := event.Links.Self.Href
-	var attendeeId string
-	for _, eventAttendee := range response.Embedded.EventAttendees {
-		if eventAttendee.Links.Event.Href == eventId {
-			attendeeId = eventAttendee.Links.Person.Href
-			break
+	exist := make(map[string]bool) // мапа, в которой ключ будет id преподавателя (значение bool для удобства)
+	for _, l := range response.Embedded.EventAttendees {
+		if l.Links.Event.Href == eventId {
+			exist[l.Links.Person.Href] = true
 		}
 	}
-	if len(attendeeId) == 0 {
+	if len(exist) == 0 {
+		return "Неизвестно"
+	}
+
+	result := make([]string, 0, len(exist))
+
+	for _, person := range response.Embedded.Persons {
+		if exist[person.Links.Self.Href] {
+			result = append(result, person.FullName)
+
+			if len(result) == len(exist) { // чтобы не делать лишние итерации в цикле
+				break
+			}
+		}
+	}
+	if len(result) == 0 {
 		return "Ошибка"
 	}
-	for _, person := range response.Embedded.Persons {
-		if person.Links.Self.Href == attendeeId {
-			return person.FullName
-		}
-	}
-	return "Ошибка"
+	return strings.Join(result, ", ")
 }
 
 // Для сортировки расписания выбрал merge_sort, потому что данные очень часто приходят абсолютно не в том порядке
