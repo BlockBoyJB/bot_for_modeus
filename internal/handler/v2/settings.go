@@ -69,7 +69,7 @@ func (r *settingsRouter) stateAddLoginPassword(c bot.Context) error {
 		return err
 	}
 	_ = c.DelData("state")
-	_, _ = lookupGI(c, r.user) // перезаписываем grades_input в кэше
+	_, _ = lookupGI(c, r.user, false) // перезаписываем grades_input в кэше
 	return c.SendMessageWithReplyKB("Логин и пароль успешно добавлены!", tgmodel.RowCommands)
 }
 

@@ -91,7 +91,7 @@ func (r *userRouter) stateChooseStudent(c bot.Context) error {
 			if e := r.user.UpdateInfo(c.Context(), input); e != nil {
 				return e
 			}
-			_, _ = lookupGI(c, r.user) // перезаписываем grades_input в кэше
+			_, _ = lookupGI(c, r.user, false) // перезаписываем grades_input в кэше
 			return c.EditMessage("Информация о пользователе успешно обновлена!")
 		}
 		return err
@@ -158,7 +158,7 @@ func (r *userRouter) callbackMeBack(c bot.Context) error {
 }
 
 func (r *userRouter) callbackAboutMe(c bot.Context) error {
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, false)
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (r *userRouter) callbackAboutMe(c bot.Context) error {
 }
 
 func (r *userRouter) callbackRatings(c bot.Context) error {
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}

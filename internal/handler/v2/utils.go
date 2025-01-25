@@ -159,10 +159,14 @@ func getFullName(c bot.Context, p parser.Parser, scheduleId string) (fullName st
 	return s.FullName, nil
 }
 
-func lookupGI(c bot.Context, u service.User) (gi parser.GradesInput, err error) {
+// Функция возвращает основную структуру для работы с пользователем - GradesInput (в которой scheduleId, gradesId, login, password).
+// Флаг decrypt для явного указания необходимости дешифровать пароль (если есть)
+// Без этого каждый вызов будет занимать на ~14.5 мс (см. бенчмарк pkg/crypter/crypter_test.go BenchmarkCrypter_Decrypt)
+// больше из-за постоянного дешифрования пароля даже там, где он не нужен
+func lookupGI(c bot.Context, u service.User, decrypt bool) (gi parser.GradesInput, err error) {
 	err = c.GetData("grades_input", &gi)
 	if err == nil {
-		if gi.Password != "" {
+		if gi.Password != "" && decrypt {
 			gi.Password, err = u.Decrypt(gi.Password)
 			if err != nil {
 				return parser.GradesInput{}, err
@@ -192,6 +196,13 @@ func lookupGI(c bot.Context, u service.User) (gi parser.GradesInput, err error) 
 	// Тут необязательно возвращать ошибку, поскольку grades input у нас есть,
 	// однако нагрузка на бд возрастет с количеством несохраненных gi в кэш
 	_ = c.SetData("grades_input", gi)
+
+	if gi.Password != "" && decrypt {
+		gi.Password, err = u.Decrypt(gi.Password)
+		if err != nil {
+			return parser.GradesInput{}, err
+		}
+	}
 	return
 }
 

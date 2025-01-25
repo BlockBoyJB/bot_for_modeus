@@ -55,7 +55,7 @@ func newScheduleRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 }
 
 func (r *scheduleRouter) cmdDaySchedule(c bot.Context) error {
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, false)
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func (r *scheduleRouter) cmdDaySchedule(c bot.Context) error {
 }
 
 func (r *scheduleRouter) cmdWeekSchedule(c bot.Context) error {
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, false)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (r *scheduleRouter) callbackUserSchedule(c bot.Context) error {
 		return err
 	}
 
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, false)
 	if err != nil {
 		return err
 	}
@@ -120,6 +120,10 @@ func (r *scheduleRouter) callbackUserSchedule(c bot.Context) error {
 			kb = append(tgmodel.BackButton("/user/day/"+day.Format(time.DateOnly)+"/"+gi.ScheduleId), tgmodel.GradesLink...)
 			return c.EditMessageWithInlineKB(txtRequiredLoginPass, kb)
 		}
+		gi.Password, err = r.user.Decrypt(gi.Password) // здесь явно дешифруем, потому что по умолчанию в зашифрованном виде
+		if err != nil {
+			return err
+		}
 		grades, e := r.parser.DayGrades(c.Context(), day, gi)
 		if e != nil {
 			return e
@@ -138,7 +142,7 @@ func (r *scheduleRouter) callbackUserSchedule(c bot.Context) error {
 }
 
 func (r *scheduleRouter) cmdGrades(c bot.Context) error {
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
@@ -177,7 +181,7 @@ func (r *scheduleRouter) callbackSemesterGradesBack(c bot.Context) error {
 		return c.EditMessageWithInlineKB(text, tgmodel.GradesButtons)
 	}
 
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
@@ -198,7 +202,7 @@ func (r *scheduleRouter) callbackSemesterGradesBack(c bot.Context) error {
 }
 
 func (r *scheduleRouter) callbackChangeSemester(c bot.Context) error {
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
@@ -236,7 +240,7 @@ func (r *scheduleRouter) stateChooseSemester(c bot.Context) error {
 		return err
 	}
 
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
@@ -253,7 +257,7 @@ func (r *scheduleRouter) stateChooseSemester(c bot.Context) error {
 }
 
 func (r *scheduleRouter) callbackSubjectLessonsGrades(c bot.Context) error {
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
@@ -283,7 +287,7 @@ func (r *scheduleRouter) callbackChooseSubjectBack(c bot.Context) error {
 		}
 		return c.SetState(stateChooseSubject)
 	}
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
@@ -304,7 +308,7 @@ func (r *scheduleRouter) callbackChooseSubjectBack(c bot.Context) error {
 }
 
 func (r *scheduleRouter) stateChooseSubject(c bot.Context) error {
-	gi, err := lookupGI(c, r.user)
+	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
