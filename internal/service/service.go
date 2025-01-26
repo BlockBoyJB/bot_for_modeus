@@ -4,8 +4,6 @@ import (
 	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/internal/repo"
 	"bot_for_modeus/pkg/crypter"
-	"bot_for_modeus/pkg/modeus"
-	"bot_for_modeus/pkg/redis"
 	"context"
 )
 
@@ -54,18 +52,15 @@ type (
 		Parser parser.Parser
 	}
 	ServicesDependencies struct {
-		Repos     *repo.Repositories
-		Crypter   crypter.Crypter
-		Parser    modeus.Parser
-		Redis     redis.Redis
-		RootLogin string
-		RootPass  string
+		Repos      *repo.Repositories
+		Crypter    crypter.Crypter
+		ParserHost string
 	}
 )
 
 func NewServices(d *ServicesDependencies) *Services {
 	return &Services{
 		User:   newUserService(d.Repos.User, d.Crypter),
-		Parser: parser.NewParserService(d.Parser, d.Redis, d.RootLogin, d.RootPass),
+		Parser: parser.NewParserService(d.ParserHost),
 	}
 }

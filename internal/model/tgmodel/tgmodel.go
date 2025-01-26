@@ -64,6 +64,9 @@ var HelpButtons = [][]tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData("🛡 Поддержка", "/help_support"),
 		tgbotapi.NewInlineKeyboardButtonData("❓ FAQ", "/help_faq"),
 	},
+	{
+		tgbotapi.NewInlineKeyboardButtonData("🏫 Адреса корпусов", "/help_buildings"),
+	},
 }
 
 func NumbersButtons(k, size int) [][]tgbotapi.InlineKeyboardButton {

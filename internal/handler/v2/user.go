@@ -54,7 +54,7 @@ func (r *userRouter) stateInputFullName(c bot.Context) error {
 	if len(c.Text()) > 200 {
 		return ErrIncorrectInput
 	}
-	students, err := r.parser.FindStudents(c.Context(), c.Text())
+	students, err := r.parser.FindStudents(c.Text())
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (r *userRouter) callbackAboutMe(c bot.Context) error {
 	if err != nil {
 		return err
 	}
-	info, err := r.parser.FindStudentById(c.Context(), gi.ScheduleId)
+	info, err := r.parser.FindStudentById(gi.ScheduleId)
 	if err != nil {
 		return err
 	}
@@ -181,14 +181,14 @@ func (r *userRouter) callbackRatings(c bot.Context) error {
 		return c.EditMessageWithInlineKB(txtRequiredLoginPass, kb)
 	}
 
-	cgpa, ratings, err := r.parser.Ratings(c.Context(), gi)
+	cgpa, ratings, err := r.parser.Ratings(gi)
 	if err != nil {
 		return err
 	}
 
 	text := "Вот информация о Ваших рейтингах:\nТекущий CGPA: " + cgpa + "\n"
-	for i := 1; i <= len(ratings); i++ {
-		text += "\n" + fmt.Sprintf(formatSemester, ratings[i].Name, ratings[i].GPA, ratings[i].PresentRate, ratings[i].AbsentRate, ratings[i].UndefinedRate) + "\n"
+	for _, sem := range ratings {
+		text += "\n" + fmt.Sprintf(formatSemester, sem.Name, sem.GPA, sem.PresentRate, sem.AbsentRate, sem.UndefinedRate) + "\n"
 	}
 	return c.EditMessageWithInlineKB(text, kbMeBack)
 }

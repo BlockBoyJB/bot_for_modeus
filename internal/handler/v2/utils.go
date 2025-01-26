@@ -5,7 +5,6 @@ import (
 	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/internal/service"
 	"bot_for_modeus/pkg/bot"
-	"context"
 	"errors"
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -63,8 +62,8 @@ func parseCallbackDate(c bot.Context) (t string, day time.Time, scheduleId strin
 	return
 }
 
-func studentDaySchedule(ctx context.Context, parser parser.Parser, now time.Time, scheduleId, prefix string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
-	schedule, err := parser.DaySchedule(ctx, scheduleId, now)
+func studentDaySchedule(parser parser.Parser, now time.Time, scheduleId, prefix string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
+	schedule, err := parser.DaySchedule(scheduleId, now)
 	if err != nil {
 		return "", nil, err
 	}
@@ -79,8 +78,8 @@ func studentDaySchedule(ctx context.Context, parser parser.Parser, now time.Time
 	return text, tgmodel.DayScheduleButtons(now, scheduleId, prefix), nil
 }
 
-func studentWeekSchedule(ctx context.Context, parser parser.Parser, now time.Time, scheduleId, prefix string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
-	schedule, err := parser.WeekSchedule(ctx, scheduleId, now)
+func studentWeekSchedule(parser parser.Parser, now time.Time, scheduleId, prefix string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
+	schedule, err := parser.WeekSchedule(scheduleId, now)
 	if err != nil {
 		return "", nil, err
 	}
@@ -123,12 +122,12 @@ func studentSchedule(c bot.Context, p parser.Parser, prefix string, backKB [][]t
 	)
 	switch t {
 	case "day":
-		text, kb, err = studentDaySchedule(c.Context(), p, day, scheduleId, prefix)
+		text, kb, err = studentDaySchedule(p, day, scheduleId, prefix)
 		if err != nil {
 			return err
 		}
 	case "week":
-		text, kb, err = studentWeekSchedule(c.Context(), p, day, scheduleId, prefix)
+		text, kb, err = studentWeekSchedule(p, day, scheduleId, prefix)
 		if err != nil {
 			return err
 		}
@@ -151,7 +150,7 @@ func getFullName(c bot.Context, p parser.Parser, scheduleId string) (fullName st
 	if err = c.GetCommonData("full_name:"+scheduleId, &fullName); err == nil {
 		return
 	}
-	s, err := p.FindStudentById(c.Context(), scheduleId)
+	s, err := p.FindStudentById(scheduleId)
 	if err != nil {
 		return "", err
 	}

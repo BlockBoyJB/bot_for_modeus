@@ -60,7 +60,7 @@ func (r *scheduleRouter) cmdDaySchedule(c bot.Context) error {
 		return err
 	}
 
-	text, kb, err := studentDaySchedule(c.Context(), r.parser, time.Now(), gi.ScheduleId, "user")
+	text, kb, err := studentDaySchedule(r.parser, time.Now(), gi.ScheduleId, "user")
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func (r *scheduleRouter) cmdWeekSchedule(c bot.Context) error {
 		return err
 	}
 
-	text, kb, err := studentWeekSchedule(c.Context(), r.parser, time.Now(), gi.ScheduleId, "user")
+	text, kb, err := studentWeekSchedule(r.parser, time.Now(), gi.ScheduleId, "user")
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (r *scheduleRouter) callbackUserSchedule(c bot.Context) error {
 
 	switch t {
 	case "day":
-		text, kb, err = studentDaySchedule(c.Context(), r.parser, day, gi.ScheduleId, "user")
+		text, kb, err = studentDaySchedule(r.parser, day, gi.ScheduleId, "user")
 		if err != nil {
 			return err
 		}
@@ -113,7 +113,7 @@ func (r *scheduleRouter) callbackUserSchedule(c bot.Context) error {
 			kb = append(kb, tgmodel.WatchDayGradesButton(day)...)
 		}
 	case "week":
-		text, kb, err = studentWeekSchedule(c.Context(), r.parser, day, gi.ScheduleId, "user")
+		text, kb, err = studentWeekSchedule(r.parser, day, gi.ScheduleId, "user")
 	case "grades":
 		// на всякий случай, хотя фактически невозможно
 		if gi.Login == "" || gi.Password == "" {
@@ -124,7 +124,7 @@ func (r *scheduleRouter) callbackUserSchedule(c bot.Context) error {
 		if err != nil {
 			return err
 		}
-		grades, e := r.parser.DayGrades(c.Context(), day, gi)
+		grades, e := r.parser.DayGrades(day, gi)
 		if e != nil {
 			return e
 		}
@@ -150,7 +150,7 @@ func (r *scheduleRouter) cmdGrades(c bot.Context) error {
 		return c.SendMessageWithInlineKB(txtRequiredLoginPass, tgmodel.GradesLink)
 	}
 
-	semester, err := r.parser.FindCurrentSemester(c.Context(), gi)
+	semester, err := r.parser.FindCurrentSemester(gi)
 	if err != nil {
 		// TODO вынести ошибку. Потому что это надо проверять во всех оценках
 		if errors.Is(err, parser.ErrIncorrectLoginPassword) {
@@ -163,7 +163,7 @@ func (r *scheduleRouter) cmdGrades(c bot.Context) error {
 		return err
 	}
 
-	grades, err := r.parser.SemesterTotalGrades(c.Context(), gi, semester)
+	grades, err := r.parser.SemesterTotalGrades(gi, semester)
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func (r *scheduleRouter) callbackSemesterGradesBack(c bot.Context) error {
 	if err = c.GetData("semester", &s); err != nil {
 		return err
 	}
-	grades, err := r.parser.SemesterTotalGrades(c.Context(), gi, s)
+	grades, err := r.parser.SemesterTotalGrades(gi, s)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (r *scheduleRouter) callbackChangeSemester(c bot.Context) error {
 	if err != nil {
 		return err
 	}
-	semesters, err := r.parser.FindAllSemesters(c.Context(), gi)
+	semesters, err := r.parser.FindAllSemesters(gi)
 	if err != nil {
 		return err
 	}
@@ -244,7 +244,7 @@ func (r *scheduleRouter) stateChooseSemester(c bot.Context) error {
 	if err != nil {
 		return err
 	}
-	grades, err := r.parser.SemesterTotalGrades(c.Context(), gi, s)
+	grades, err := r.parser.SemesterTotalGrades(gi, s)
 	if err != nil {
 		return err
 	}
@@ -265,7 +265,7 @@ func (r *scheduleRouter) callbackSubjectLessonsGrades(c bot.Context) error {
 	if err = c.GetData("semester", &semester); err != nil {
 		return err
 	}
-	subjects, err := r.parser.FindSemesterSubjects(c.Context(), gi, semester)
+	subjects, err := r.parser.FindSemesterSubjects(gi, semester)
 	if err != nil {
 		return err
 	}
@@ -295,7 +295,7 @@ func (r *scheduleRouter) callbackChooseSubjectBack(c bot.Context) error {
 	if err = c.GetData("semester", &semester); err != nil {
 		return err
 	}
-	subjects, err = r.parser.FindSemesterSubjects(c.Context(), gi, semester)
+	subjects, err = r.parser.FindSemesterSubjects(gi, semester)
 	if err != nil {
 		return err
 	}
@@ -316,15 +316,15 @@ func (r *scheduleRouter) stateChooseSubject(c bot.Context) error {
 	if err = c.GetData("semester", &semester); err != nil {
 		return err
 	}
-	subjectLessons, err := r.parser.SubjectDetailedInfo(c.Context(), gi, semester, c.Text())
+	subjectLessons, err := r.parser.SubjectDetailedInfo(gi, semester, c.Text())
 	if err != nil {
 		return err
 	}
 	var messages []string
 	text := "Вот все оценки за проведенные пары по выбранному предмету:"
 	textLength := len(text)
-	for i := 0; i < len(subjectLessons); i++ {
-		n := "\n" + fmt.Sprintf(formatLessonGrades, i+1, subjectLessons[i].Name, subjectLessons[i].Type, subjectLessons[i].Time, subjectLessons[i].Attendance, subjectLessons[i].Grades)
+	for _, lesson := range subjectLessons {
+		n := "\n" + fmt.Sprintf(formatLessonGrades, lesson.Name, lesson.Type, lesson.Time, lesson.Attendance, lesson.Grades)
 		textLength += len(n)
 		if textLength > 4096 {
 			messages = append(messages, text)

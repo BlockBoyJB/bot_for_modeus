@@ -6,13 +6,12 @@ import (
 )
 
 type Config struct {
-	Bot          Bot
-	MongoDB      MongoDB
-	Redis        Redis
-	Log          Log
-	Root         Root
-	Crypter      Crypter
-	TokenService TokenService
+	Bot     Bot
+	MongoDB MongoDB
+	Redis   Redis
+	Log     Log
+	Crypter Crypter
+	Parser  Parser
 }
 
 type (
@@ -31,15 +30,11 @@ type (
 		Level  string `env-required:"true" env:"LOG_LEVEL"`
 		Output string `env-required:"true" env:"LOG_OUTPUT"`
 	}
-	Root struct {
-		Login    string `env-required:"true" env:"MAIN_USER"`
-		Password string `env-required:"true" env:"MAIN_PASS"`
-	}
 	Crypter struct {
 		Secret string `env-required:"true" env:"SECRET"`
 	}
-	TokenService struct {
-		Url string `env-required:"true" env:"TOKEN_SERVICE_URL"`
+	Parser struct {
+		Host string `env-required:"true" env:"PARSER_HOST"`
 	}
 )
 

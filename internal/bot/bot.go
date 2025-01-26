@@ -7,7 +7,6 @@ import (
 	"bot_for_modeus/internal/service"
 	"bot_for_modeus/pkg/bot"
 	"bot_for_modeus/pkg/crypter"
-	"bot_for_modeus/pkg/modeus"
 	"bot_for_modeus/pkg/mongo"
 	"bot_for_modeus/pkg/redis"
 	"context"
@@ -38,12 +37,9 @@ func Run() {
 	defer rdb.Close()
 
 	d := &service.ServicesDependencies{
-		Repos:     repo.NewRepositories(mongodb),
-		Parser:    modeus.NewModeus(modeus.NewTokenService(cfg.TokenService.Url)),
-		Redis:     rdb,
-		Crypter:   crypter.NewCrypter(cfg.Crypter.Secret),
-		RootLogin: cfg.Root.Login,
-		RootPass:  cfg.Root.Password,
+		Repos:      repo.NewRepositories(mongodb),
+		Crypter:    crypter.NewCrypter(cfg.Crypter.Secret),
+		ParserHost: cfg.Parser.Host,
 	}
 	services := service.NewServices(d)
 

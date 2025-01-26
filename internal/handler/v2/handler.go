@@ -11,7 +11,7 @@ func NewHandler(b *bot.Bot, services *service.Services) {
 
 	b.Command("/test", test)
 
-	newHelpRouter(b)
+	newHelpRouter(b, services.Parser)
 	newStudentRouter(b, services.Parser)
 	newUserRouter(b, services.User, services.Parser)
 	newFriendsRouter(b, services.User, services.Parser)

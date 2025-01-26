@@ -2,6 +2,7 @@ package v2
 
 import (
 	"bot_for_modeus/internal/model/tgmodel"
+	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/pkg/bot"
 	"fmt"
 	"os"
@@ -10,12 +11,13 @@ import (
 var kbHelpBack = tgmodel.BackButton("/help_back")
 
 type helpRouter struct {
-	//parser parser.Parser
+	parser parser.Parser
 }
 
-// TODO информация о сетке расписания, адреса корпусов
-func newHelpRouter(b *bot.Bot) {
-	r := &helpRouter{}
+func newHelpRouter(b *bot.Bot, parser parser.Parser) {
+	r := &helpRouter{
+		parser: parser,
+	}
 
 	b.Command("/help", r.cmdHelp)
 	b.Message(tgmodel.HelpButton, r.cmdHelp)
@@ -28,6 +30,7 @@ func newHelpRouter(b *bot.Bot) {
 	b.Callback("/help_me", r.callbackMe)
 	b.Callback("/help_support", r.callbackSupport)
 	b.Callback("/help_faq", r.callbackFAQ)
+	b.Callback("/help_buildings", r.callbackBuildings)
 }
 
 func (r *helpRouter) cmdHelp(c bot.Context) error {
@@ -69,6 +72,18 @@ func (r *helpRouter) callbackSupport(c bot.Context) error {
 
 func (r *helpRouter) callbackFAQ(c bot.Context) error {
 	return c.EditMessageWithInlineKB(txtHelpFAQ, kbHelpBack)
+}
+
+func (r *helpRouter) callbackBuildings(c bot.Context) error {
+	buildings, err := r.parser.FindBuildings()
+	if err != nil {
+		return err
+	}
+	txt := "Вот все адреса корпусов:\n"
+	for _, b := range buildings {
+		txt += fmt.Sprintf(formatBuilding, b.Name, b.SearchUrl, b.Address)
+	}
+	return c.EditMessageWithInlineKB(txt, kbHelpBack)
 }
 
 const (

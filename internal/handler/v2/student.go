@@ -46,7 +46,7 @@ func (r *studentRouter) stateInputOtherStudent(c bot.Context) error {
 	if len(c.Text()) > 200 {
 		return ErrIncorrectInput
 	}
-	students, err := r.parser.FindStudents(c.Context(), c.Text())
+	students, err := r.parser.FindStudents(c.Text())
 	if err != nil {
 		return err
 	}
