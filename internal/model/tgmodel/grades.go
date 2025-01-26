@@ -16,6 +16,7 @@ var GradesButtons = [][]tgbotapi.InlineKeyboardButton{
 }
 
 func WatchDayGradesButton(now time.Time) [][]tgbotapi.InlineKeyboardButton {
+	now = now.In(defaultLocation)
 	return [][]tgbotapi.InlineKeyboardButton{{
 		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("Оценки на %s", now.Format("02.01")), formatScheduleButtonsData(now, "grades", "user", "user")),
 	}}

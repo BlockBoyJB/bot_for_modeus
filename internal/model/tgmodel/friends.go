@@ -6,7 +6,7 @@ import (
 )
 
 func ChooseFriendAction(scheduleId string) [][]tgbotapi.InlineKeyboardButton {
-	now := time.Now()
+	now := time.Now().In(defaultLocation)
 	return [][]tgbotapi.InlineKeyboardButton{
 		{
 			tgbotapi.NewInlineKeyboardButtonData("Расписание на день", formatScheduleButtonsData(now, "day", scheduleId, "friends")),

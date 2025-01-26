@@ -12,6 +12,10 @@ import (
 	"time"
 )
 
+var (
+	defaultLocation, _ = time.LoadLocation("Asia/Yekaterinburg") // По умолчанию GMT+5 (время в Тюмени)
+)
+
 func formatStudents(students []parser.Student) (string, [][]tgbotapi.InlineKeyboardButton) {
 	text := "Вот все студенты, которых мне удалось найти:"
 	for k, s := range students {
@@ -63,6 +67,7 @@ func parseCallbackDate(c bot.Context) (t string, day time.Time, scheduleId strin
 }
 
 func studentDaySchedule(parser parser.Parser, now time.Time, scheduleId, prefix string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
+	now = now.In(defaultLocation)
 	schedule, err := parser.DaySchedule(scheduleId, now)
 	if err != nil {
 		return "", nil, err
@@ -79,6 +84,7 @@ func studentDaySchedule(parser parser.Parser, now time.Time, scheduleId, prefix 
 }
 
 func studentWeekSchedule(parser parser.Parser, now time.Time, scheduleId, prefix string) (string, [][]tgbotapi.InlineKeyboardButton, error) {
+	now = now.In(defaultLocation)
 	schedule, err := parser.WeekSchedule(scheduleId, now)
 	if err != nil {
 		return "", nil, err

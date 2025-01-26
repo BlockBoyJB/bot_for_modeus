@@ -11,6 +11,10 @@ const (
 	txtBackButton = "⬅️ Назад"
 )
 
+var (
+	defaultLocation, _ = time.LoadLocation("Asia/Yekaterinburg") // По умолчанию GMT+5 (время в Тюмени)
+)
+
 var nums = map[int]string{
 	0: "0️⃣",
 	1: "1️⃣",
@@ -33,7 +37,7 @@ var YesOrNoButtons = [][]tgbotapi.InlineKeyboardButton{
 }
 
 func OtherStudentButtons(scheduleId string) [][]tgbotapi.InlineKeyboardButton {
-	now := time.Now()
+	now := time.Now().In(defaultLocation)
 	return [][]tgbotapi.InlineKeyboardButton{
 		{
 			tgbotapi.NewInlineKeyboardButtonData("Расписание на день", formatScheduleButtonsData(now, "day", scheduleId, "student")),

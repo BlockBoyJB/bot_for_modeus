@@ -27,7 +27,7 @@ type scheduleRequest struct {
 }
 
 func (p *parser) DaySchedule(scheduleId string, now time.Time) ([]Lesson, error) {
-	return p.parseSchedule(scheduleRequest{ // TODO fix timezone
+	return p.parseSchedule(scheduleRequest{
 		Start:      time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
 		End:        time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location()),
 		ScheduleId: scheduleId,
@@ -36,7 +36,7 @@ func (p *parser) DaySchedule(scheduleId string, now time.Time) ([]Lesson, error)
 
 func (p *parser) WeekSchedule(scheduleId string, now time.Time) (map[int][]Lesson, error) {
 	start := now.Day() - int(now.Weekday()) + 1
-	input := scheduleRequest{ // TODO fix timezone
+	input := scheduleRequest{
 		Start:      time.Date(now.Year(), now.Month(), start, 0, 0, 0, 0, now.Location()),
 		End:        time.Date(now.Year(), now.Month(), start+6, 0, 0, 0, 0, now.Location()),
 		ScheduleId: scheduleId,
