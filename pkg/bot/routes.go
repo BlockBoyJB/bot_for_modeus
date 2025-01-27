@@ -74,33 +74,54 @@ const (
 	paramKind
 )
 
-// Опять вдохновился echo
+// Узел для динамической маршрутизации.
+// Изначально была потребность в гибких коллбэках с параметрами.
+// Это был переход от fsm и состояний к гибкости и скорости (в кэш смотреть, очевидно, дольше, чем гибкий коллбэк)
+// Текущий вариант поддерживает как статический сегмент пути, так и параметрический (который может меняться)
 type node struct {
 	kind    kind
-	path    string
-	child   []*node
 	handler HandlerFunc
+	static  map[string]*node
+	param   *node
+	path    string
 }
 
 func (r *route) addTree(path string, h HandlerFunc) {
-	segments := strings.Split(path, "/")
 	currNode := r.tree
 
-	for _, seg := range segments {
+	for len(path) > 0 {
+		seg := path
+		if idx := strings.IndexByte(path, '/'); idx != -1 {
+			seg, path = path[:idx], path[idx+1:]
+		} else {
+			path = ""
+		}
+
 		if seg == "" {
 			continue
 		}
 
-		c := r.findChild(currNode, seg)
-		if c == nil {
-			c = &node{
-				path: seg,
-				kind: staticKind,
+		var c *node
+		if seg[0] == ':' {
+			if currNode.param == nil {
+				currNode.param = &node{
+					path: seg,
+					kind: paramKind,
+				}
 			}
-			if strings.HasPrefix(seg, ":") {
-				c.kind = paramKind
+			c = currNode.param
+		} else { // Это статический узел
+			if currNode.static == nil {
+				currNode.static = make(map[string]*node)
 			}
-			currNode.child = append(currNode.child, c)
+			c = currNode.static[seg]
+			if c == nil {
+				c = &node{
+					path: seg,
+					kind: staticKind,
+				}
+				currNode.static[seg] = c
+			}
 		}
 		currNode = c
 	}
@@ -109,10 +130,16 @@ func (r *route) addTree(path string, h HandlerFunc) {
 
 func (r *route) findTree(c Context, path string) (HandlerFunc, bool) {
 	ctx := c.(*nativeContext)
-	segments := strings.Split(path, "/")
 	currNode := r.tree
 
-	for _, seg := range segments {
+	for len(path) > 0 {
+		seg := path
+		if index := strings.IndexByte(path, '/'); index != -1 {
+			seg, path = path[:index], path[index+1:]
+		} else {
+			path = ""
+		}
+
 		if seg == "" {
 			continue
 		}
@@ -123,8 +150,7 @@ func (r *route) findTree(c Context, path string) (HandlerFunc, bool) {
 		}
 
 		if child.kind == paramKind {
-			p := strings.TrimPrefix(child.path, ":")
-			ctx.setParam(p, seg)
+			ctx.setParam(child.path[1:], seg)
 		}
 		currNode = child
 	}
@@ -132,10 +158,13 @@ func (r *route) findTree(c Context, path string) (HandlerFunc, bool) {
 }
 
 func (r *route) findChild(n *node, seg string) *node {
-	for _, c := range n.child {
-		if c.path == seg || c.kind == paramKind {
+	if n.static != nil {
+		if c, ok := n.static[seg]; ok {
 			return c
 		}
+	}
+	if n.param != nil {
+		return n.param
 	}
 	return nil
 }
