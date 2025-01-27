@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/bytedance/sonic"
 	"github.com/redis/go-redis/v9"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 )
 
 var (
@@ -172,10 +174,6 @@ func (s *memoryStorage) clear(id int64) error {
 	return nil
 }
 
-const (
-	redisStoragePrefix = "fsm:%d:%s"
-)
-
 type redisStorage struct {
 	*redis.Client
 	ctx context.Context
@@ -215,7 +213,7 @@ func (s *redisStorage) setTempData(id int64, key string, v any, d time.Duration)
 }
 
 func (s *redisStorage) setCommonData(key string, v any, d time.Duration) error {
-	b, err := json.Marshal(v)
+	b, err := sonic.Marshal(v)
 	if err != nil {
 		return err
 	}
@@ -227,32 +225,30 @@ func (s *redisStorage) getData(id int64, key string, v any) error {
 }
 
 func (s *redisStorage) getCommonData(key string, v any) error {
-	b, err := s.Get(s.ctx, s.normalizeKey(key)).Bytes()
+	b, err := s.Get(s.ctx, s.normalizeKey(key)).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return ErrKeyNotExists
 		}
 		return err
 	}
-	return json.Unmarshal(b, v)
+	return sonic.UnmarshalString(b, v)
 }
 
 // Удаляет данные по заданному ключу. Не работает с паттернами по типу fsm:id:*. Нужно точное соответствие.
 // Не возвращает ошибку redis.Nil
 func (s *redisStorage) delData(id int64, keys ...string) error {
-	var f []string
-	for _, k := range keys {
-		f = append(f, s.dataKey(id, k))
+	for i, k := range keys {
+		keys[i] = s.dataKey(id, k)
 	}
-	return s.Del(s.ctx, f...).Err()
+	return s.Del(s.ctx, keys...).Err()
 }
 
 func (s *redisStorage) delCommonData(keys ...string) error {
-	var k []string
-	for _, key := range keys {
-		k = append(k, s.normalizeKey(key))
+	for i, k := range keys {
+		keys[i] = s.normalizeKey(k)
 	}
-	return s.Del(s.ctx, k...).Err()
+	return s.Del(s.ctx, keys...).Err()
 }
 
 // Работает достаточно медленно, потому что стираются все пользовательские ключи, поэтому преимущественно использовать delData.
@@ -277,21 +273,28 @@ func (s *redisStorage) clear(id int64) error {
 		}
 	}
 
-	for _, k := range keys {
-		err := s.Del(s.ctx, k).Err()
-		if err != nil {
-			return err
-		}
+	if len(keys) == 0 {
+		return nil
 	}
-	return nil
+	return s.Del(s.ctx, keys...).Err()
 }
 
 func (s *redisStorage) stateKey(id int64) string {
 	return s.dataKey(id, "state")
 }
 
+// Ключ в формате fsm:id:key
+// Создаем буфер размером 24 + len(key) из которых 4 байта на префикс "fsm:", 19 на int64 (не 20, потому что только числа > 0) и еще 1 на символ ":" = 24
+// Уменьшаем аллокации и стреляем в ногу - делаем строку через unsafe.
 func (s *redisStorage) dataKey(id int64, key string) string {
-	return fmt.Sprintf(redisStoragePrefix, id, key)
+	buf := make([]byte, 0, 24+len(key)) // fsm: (4) + int64 (19, т.к. id > 0, поэтому не включаем -) + : (1) = 24
+
+	buf = append(buf, "fsm:"...)
+	buf = strconv.AppendInt(buf, id, 10)
+	buf = append(buf, ':')
+	buf = append(buf, key...)
+
+	return *(*string)(unsafe.Pointer(&buf))
 }
 
 func (s *redisStorage) normalizeKey(key string) string {

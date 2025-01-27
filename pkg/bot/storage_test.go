@@ -2,7 +2,8 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
+	"github.com/bytedance/sonic"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/suite"
 	"testing"
@@ -126,8 +127,8 @@ func (s *redisStorageTestSuite) Test_setData() {
 		{
 			testName: "test map",
 			data: map[string]string{
-				"message": "hello world",
 				"foo":     "bar",
+				"message": "hello world",
 			},
 		},
 		{
@@ -149,10 +150,11 @@ func (s *redisStorageTestSuite) Test_setData() {
 		b, err := s.redis.Get(s.ctx, s.storage.dataKey(defaultId, defaultKey)).Bytes()
 		s.Assert().Nil(err)
 
-		expectData, err := json.Marshal(tc.data)
+		expectData, err := sonic.Marshal(tc.data)
 		s.Assert().Nil(err)
 
 		// разницы нет в каком варианте их сравнивать: слайс байтов или через тип данных + значение
+		// UPD: после замены std на bytedance/sonic разница есть только для map, причем порядок ключей имеет значение =)
 		s.Assert().Equal(expectData, b)
 	}
 }
@@ -186,8 +188,8 @@ func (s *redisStorageTestSuite) Test_setTempData() {
 		{
 			testName: "test map",
 			data: map[int]string{
-				1: "hello",
 				2: "world",
+				1: "hello",
 			},
 			ttl: time.Hour * 10,
 		},
@@ -234,8 +236,8 @@ func (s *redisStorageTestSuite) Test_setCommonData() {
 			testName: "test map",
 			key:      "bar",
 			data: map[int]string{
-				1: "hello",
 				2: "world",
+				1: "hello",
 			},
 			ttl: time.Hour * 10,
 		},
@@ -260,7 +262,7 @@ func (s *redisStorageTestSuite) Test_setCommonData() {
 		b, err := s.redis.Get(s.ctx, s.storage.normalizeKey(tc.key)).Bytes()
 		s.Assert().Nil(err)
 
-		expectData, err := json.Marshal(tc.data)
+		expectData, err := sonic.Marshal(tc.data)
 		s.Assert().Nil(err)
 
 		s.Assert().Equal(expectData, b)
@@ -281,7 +283,7 @@ func (s *redisStorageTestSuite) Test_getData() {
 		}
 	)
 
-	b, err := json.Marshal(defaultData)
+	b, err := sonic.Marshal(defaultData)
 	if err != nil {
 		s.T().Fatalf("marhsall test data err: %s", err)
 	}
@@ -336,7 +338,7 @@ func (s *redisStorageTestSuite) Test_getCommonData() {
 		}
 	)
 
-	b, err := json.Marshal(defaultData)
+	b, err := sonic.Marshal(defaultData)
 	if err != nil {
 		s.T().Fatalf("marhsal test data err: %s", err)
 	}
@@ -565,6 +567,31 @@ func (s *redisStorageTestSuite) Test_clear() {
 
 			s.Assert().NotZero(exist)
 
+		}
+	}
+}
+
+func Benchmark_dataKey(b *testing.B) {
+	s := &redisStorage{}
+
+	for i := 0; i < b.N; i++ {
+		key := s.dataKey(10000000000000, "state")
+		if key != "fsm:10000000000000:state" {
+			b.Fatalf("not equal expect fsm:10000000000000:state, got %s", key)
+		}
+	}
+}
+
+// Старый вариант создания ключа для redis storage. (через fmt Sprintf)
+func Benchmark_oldDataKey(b *testing.B) {
+	f := func(id int64, key string) string {
+		return fmt.Sprintf("fsm:%d:%s", id, key)
+	}
+
+	for i := 0; i < b.N; i++ {
+		key := f(10000000000000, "state")
+		if key != "fsm:10000000000000:state" {
+			b.Fatalf("not equal expect fsm:10000000000000:state, got %s", key)
 		}
 	}
 }
