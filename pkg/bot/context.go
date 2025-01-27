@@ -24,6 +24,7 @@ type Context interface {
 	EditMessage(text string) error
 	EditMessageWithInlineKB(text string, kb [][]tgbotapi.InlineKeyboardButton) error
 
+	DeleteLastMessage() error
 	DeleteInlineKB() error
 
 	SetState(state string) error
@@ -97,27 +98,27 @@ func (c *nativeContext) Param(name string) string {
 func (c *nativeContext) SendMessage(text string) error {
 	msg := tgbotapi.NewMessage(c.UserId(), text)
 	msg.ParseMode = c.bot.parseMode
-	return c.sendMessage(msg)
+	return c.request(msg)
 }
 
 func (c *nativeContext) SendMessageWithInlineKB(text string, kb [][]tgbotapi.InlineKeyboardButton) error {
 	msg := tgbotapi.NewMessage(c.UserId(), text)
 	msg.ParseMode = c.bot.parseMode
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(kb...)
-	return c.sendMessage(msg)
+	return c.request(msg)
 }
 
 func (c *nativeContext) SendMessageWithReplyKB(text string, kb [][]tgbotapi.KeyboardButton) error {
 	msg := tgbotapi.NewMessage(c.UserId(), text)
 	msg.ParseMode = c.bot.parseMode
 	msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(kb...)
-	return c.sendMessage(msg)
+	return c.request(msg)
 }
 
 func (c *nativeContext) EditMessage(text string) error {
 	msg := tgbotapi.NewEditMessageText(c.UserId(), c.lastMessageId(), text)
 	msg.ParseMode = c.bot.parseMode
-	return c.sendMessage(msg)
+	return c.request(msg)
 }
 
 func (c *nativeContext) EditMessageWithInlineKB(text string, kb [][]tgbotapi.InlineKeyboardButton) error {
@@ -127,18 +128,23 @@ func (c *nativeContext) EditMessageWithInlineKB(text string, kb [][]tgbotapi.Inl
 	r := tgbotapi.NewInlineKeyboardMarkup(kb...)
 	msg.ReplyMarkup = &r
 
-	return c.sendMessage(msg)
+	return c.request(msg)
+}
+
+func (c *nativeContext) DeleteLastMessage() error {
+	msg := tgbotapi.NewDeleteMessage(c.UserId(), c.lastMessageId())
+	return c.request(msg)
 }
 
 func (c *nativeContext) DeleteInlineKB() error {
 	msg := tgbotapi.NewEditMessageText(c.UserId(), c.lastMessageId(), c.update.CallbackQuery.Message.Text)
 	msg.ParseMode = c.bot.parseMode
-	return c.sendMessage(msg)
+	return c.request(msg)
 }
 
-func (c *nativeContext) sendMessage(msg tgbotapi.Chattable) error {
-	if _, err := c.bot.client.Send(msg); err != nil {
-		c.bot.logger.Printf("/Context/sendMessage error send message to user: %s", err)
+func (c *nativeContext) request(msg tgbotapi.Chattable) error {
+	if _, err := c.bot.client.Request(msg); err != nil {
+		c.bot.logger.Printf("/Context/request error send message to user: %s", err)
 		return err
 	}
 	return nil
