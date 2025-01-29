@@ -223,6 +223,45 @@ func lookupFriends(c bot.Context, u service.User) (friends map[string]string, er
 	return user.Friends, nil
 }
 
+func lookupSemesters(c bot.Context, p parser.Parser, gi parser.GradesInput) ([]parser.Semester, error) {
+	var semesters []parser.Semester
+	if err := c.GetData("semesters", &semesters); err == nil {
+		return semesters, nil
+	}
+	semesters, err := p.FindAllSemesters(gi)
+	if err != nil {
+		return nil, err
+	}
+	if len(semesters) == 0 {
+		return nil, errors.New("lookupSemesters: cannot find semesters from modeus")
+	}
+	_ = c.SetTempData("semesters", semesters, defaultCacheTimeout)
+	return semesters, nil
+}
+
+// Функция ищет семестр по semesterId. Сначала кэш, потом запрос в модеус. Если semesterId не указан (пустая строка), то возвращаем последний (текущий)
+func lookupSemester(c bot.Context, p parser.Parser, gi parser.GradesInput, semesterId string) (semester parser.Semester, err error) {
+	if err = c.GetData("semester:"+semesterId, &semester); err == nil { // Ничего не найдет, если семестр не указан. Важно следить, чтобы Set всегда был с semesterId, иначе фатально
+		return
+	}
+	semesters, err := lookupSemesters(c, p, gi)
+	if err != nil {
+		return parser.Semester{}, err
+	}
+	if semesterId == "" {
+		semester = semesters[len(semesters)-1]
+		_ = c.SetTempData("semester:"+semester.Id, semester, defaultCacheTimeout)
+		return
+	}
+	for _, s := range semesters {
+		if s.Id == semesterId {
+			_ = c.SetTempData("semester:"+s.Id, s, defaultCacheTimeout)
+			return s, nil
+		}
+	}
+	return parser.Semester{}, fmt.Errorf("lookupSemester: semester with id %s not found", semesterId)
+}
+
 // От модеуса даты приходят в неудобном для чтения виде, поэтому мы приводим их в нормальный вариант
 func parseSemesterDate(d string) string {
 	t, err := time.Parse("2006-01-02T05:04:15", d)

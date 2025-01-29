@@ -8,11 +8,13 @@ import (
 
 var GradesLink = [][]tgbotapi.InlineKeyboardButton{{tgbotapi.NewInlineKeyboardButtonURL("Посмотреть на сайте", "https://utmn.modeus.org/students-app/my-results")}}
 
-var GradesButtons = [][]tgbotapi.InlineKeyboardButton{
-	{
-		tgbotapi.NewInlineKeyboardButtonData("Оценки по встречам", "/subject_lessons_grades"),
-		tgbotapi.NewInlineKeyboardButtonData("Другой семестр", "/change_semester"),
-	},
+func GradesButtons(semesterId string) [][]tgbotapi.InlineKeyboardButton {
+	return [][]tgbotapi.InlineKeyboardButton{
+		{
+			tgbotapi.NewInlineKeyboardButtonData("Оценки по встречам", fmt.Sprintf("/grades/semester/%s/subjects", semesterId)),
+			tgbotapi.NewInlineKeyboardButtonData("Другой семестр", fmt.Sprintf("/grades/semester/change/%s", semesterId)),
+		},
+	}
 }
 
 func WatchDayGradesButton(now time.Time) [][]tgbotapi.InlineKeyboardButton {

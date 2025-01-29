@@ -5,16 +5,17 @@ import (
 	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/internal/service"
 	"bot_for_modeus/pkg/bot"
-	"errors"
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"strconv"
 	"time"
 )
 
 const (
 	// Решил кэшировать некоторые данные (в частности текст) в разделе оценок, потому что их повторное обновление очень долгое
 	// Время кэширования небольшое из расчета на то, что эти данные не успеют измениться за этот промежуток
-	defaultCacheTimeout = time.Minute * 7
+	defaultTextCacheTimeout = time.Minute * 7
+	defaultCacheTimeout     = time.Hour
 )
 
 var dates = map[int]string{
@@ -46,12 +47,12 @@ func newScheduleRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 
 	b.Command("/grades", r.cmdGrades)
 	b.Message(tgmodel.GradesButton, r.cmdGrades)
-	b.Callback("/semester_grades_back", r.callbackSemesterGradesBack)
-	b.Callback("/change_semester", r.callbackChangeSemester)
-	b.State(stateChooseSemester, r.stateChooseSemester)
-	b.Callback("/subject_lessons_grades", r.callbackSubjectLessonsGrades)
-	b.Callback("/choose_subject_back", r.callbackChooseSubjectBack)
-	b.State(stateChooseSubject, r.stateChooseSubject)
+
+	b.AddTree(bot.OnCallback, "/grades/semester/change/:semester_id", r.callbackChangeSemester)
+	b.AddTree(bot.OnCallback, "/grades/semester/:semester_id/subjects", r.callbackChooseSemesterSubject)
+
+	b.AddTree(bot.OnCallback, "/grades/semester/:semester_id", r.callbackSemesterGrades)
+	b.AddTree(bot.OnCallback, "/grades/subjects/:subject_id/:index", r.callbackSubjectDetailedInfo)
 }
 
 func (r *scheduleRouter) cmdDaySchedule(c bot.Context) error {
@@ -150,55 +151,29 @@ func (r *scheduleRouter) cmdGrades(c bot.Context) error {
 		return c.SendMessageWithInlineKB(txtRequiredLoginPass, tgmodel.GradesLink)
 	}
 
-	semester, err := r.parser.FindCurrentSemester(gi)
+	semester, err := lookupSemester(c, r.parser, gi, "")
 	if err != nil {
-		// TODO вынести ошибку. Потому что это надо проверять во всех оценках
-		if errors.Is(err, parser.ErrIncorrectLoginPassword) {
-			return c.SendMessage(txtIncorrectLoginPass)
-		}
 		return err
 	}
 
-	if err = c.SetData("semester", semester); err != nil {
-		return err
+	// Были вопросы насчет кэширования текста тут, потому что логичным является
+	// использовать команду /grades для "перезагрузки" текущего состояния оценок.
+	// Но решил добавить кэширование во избежание злоупотребления командой и снижения нагрузки на модеус
+	var text string
+	if err = c.GetData("semester_grades:"+semester.Id, &text); err == nil {
+		return c.SendMessageWithInlineKB(text, tgmodel.GradesButtons(semester.Id))
 	}
 
 	grades, err := r.parser.SemesterTotalGrades(gi, semester)
 	if err != nil {
 		return err
 	}
-	text := "Вот все оценки по изучаемым дисциплинам в текущем семестре:"
+	text = "Вот все оценки по изучаемым дисциплинам в текущем семестре:"
 	for _, subjectGrades := range grades {
 		text += "\n" + fmt.Sprintf(formatSemesterGrades, subjectGrades.Status, subjectGrades.Name, subjectGrades.CurrentResult, subjectGrades.SemesterResult, subjectGrades.PresentRate, subjectGrades.AbsentRate, subjectGrades.UndefinedRate) + "\n"
 	}
-	_ = c.SetTempData("semester_grades", text, defaultCacheTimeout)
-	return c.SendMessageWithInlineKB(text, tgmodel.GradesButtons)
-}
-
-func (r *scheduleRouter) callbackSemesterGradesBack(c bot.Context) error {
-	var text string
-	if err := c.GetData("semester_grades", &text); err == nil {
-		return c.EditMessageWithInlineKB(text, tgmodel.GradesButtons)
-	}
-
-	gi, err := lookupGI(c, r.user, true)
-	if err != nil {
-		return err
-	}
-
-	var s parser.Semester
-	if err = c.GetData("semester", &s); err != nil {
-		return err
-	}
-	grades, err := r.parser.SemesterTotalGrades(gi, s)
-	if err != nil {
-		return err
-	}
-	text = fmt.Sprintf("Вот все оценки по изучаемым дисциплинам в %dм семестре (%s - %s):", s.Number, parseSemesterDate(s.StartDate), parseSemesterDate(s.EndDate))
-	for _, subjectGrades := range grades {
-		text += "\n" + fmt.Sprintf(formatSemesterGrades, subjectGrades.Status, subjectGrades.Name, subjectGrades.CurrentResult, subjectGrades.SemesterResult, subjectGrades.PresentRate, subjectGrades.AbsentRate, subjectGrades.UndefinedRate) + "\n"
-	}
-	return c.EditMessageWithInlineKB(text, tgmodel.GradesButtons)
+	_ = c.SetTempData("semester_grades:"+semester.Id, text, defaultTextCacheTimeout)
+	return c.SendMessageWithInlineKB(text, tgmodel.GradesButtons(semester.Id))
 }
 
 func (r *scheduleRouter) callbackChangeSemester(c bot.Context) error {
@@ -206,117 +181,110 @@ func (r *scheduleRouter) callbackChangeSemester(c bot.Context) error {
 	if err != nil {
 		return err
 	}
-	semesters, err := r.parser.FindAllSemesters(gi)
+	semesters, err := lookupSemesters(c, r.parser, gi)
 	if err != nil {
 		return err
 	}
-	if err = c.SetData("semesters", semesters); err != nil {
-		return err
-	}
 
-	buttons := make(map[string]string)
-	for id, s := range semesters {
-		buttons[id] = fmt.Sprintf("%dй семестр. (%s - %s)", s.Number, parseSemesterDate(s.StartDate), parseSemesterDate(s.EndDate))
+	buttons := make([]tgmodel.Button, 0, len(semesters))
+	for _, s := range semesters {
+		buttons = append(buttons, tgmodel.Button{
+			Text: fmt.Sprintf("%dй семестр. (%s - %s)", s.Number, parseSemesterDate(s.StartDate), parseSemesterDate(s.EndDate)),
+			Data: "/grades/semester/" + s.Id,
+		})
 	}
+	// TODO можно подсветить текущий semester
 
-	kb := append(tgmodel.InlineRowButtons(buttons, 1), tgmodel.BackButton("/semester_grades_back")...)
-	if err = c.EditMessageWithInlineKB("Выберите семестр:", kb); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseSemester)
+	kb := append(tgmodel.CustomInlineRowButtons(buttons, 1), tgmodel.BackButton("/grades/semester/"+c.Param("semester_id"))...)
+	return c.EditMessageWithInlineKB("Выберите семестр:", kb)
 }
 
-func (r *scheduleRouter) stateChooseSemester(c bot.Context) error {
-	var semesters map[string]parser.Semester
-	if err := c.GetData("semesters", &semesters); err != nil {
-		return err
-	}
-
-	s, ok := semesters[c.Text()]
-	if !ok {
-		return errors.New("cannot find user semester")
-	}
-	if err := c.SetData("semester", s); err != nil {
-		return err
+func (r *scheduleRouter) callbackSemesterGrades(c bot.Context) error {
+	var text string
+	if err := c.GetData("semester_grades:"+c.Param("semester_id"), &text); err == nil {
+		return c.EditMessageWithInlineKB(text, tgmodel.GradesButtons(c.Param("semester_id")))
 	}
 
 	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
-	grades, err := r.parser.SemesterTotalGrades(gi, s)
+
+	semester, err := lookupSemester(c, r.parser, gi, c.Param("semester_id"))
 	if err != nil {
 		return err
 	}
-	text := fmt.Sprintf("Вот все оценки по изучаемым дисциплинам в %dм семестре (%s - %s):", s.Number, parseSemesterDate(s.StartDate), parseSemesterDate(s.EndDate))
-	for _, subjectGrades := range grades {
-		text += "\n" + fmt.Sprintf(formatSemesterGrades, subjectGrades.Status, subjectGrades.Name, subjectGrades.CurrentResult, subjectGrades.SemesterResult, subjectGrades.PresentRate, subjectGrades.AbsentRate, subjectGrades.UndefinedRate) + "\n"
+
+	grades, err := r.parser.SemesterTotalGrades(gi, semester)
+	if err != nil {
+		return err
 	}
-	_ = c.SetTempData("semester_grades", text, defaultCacheTimeout)
-	return c.EditMessageWithInlineKB(text, tgmodel.GradesButtons)
+
+	text = fmt.Sprintf("Вот все оценки по изучаемым дисциплинам в %dм семестре (%s - %s):", semester.Number, parseSemesterDate(semester.StartDate), parseSemesterDate(semester.EndDate))
+	for _, g := range grades {
+		text += "\n" + fmt.Sprintf(formatSemesterGrades, g.Status, g.Name, g.CurrentResult, g.SemesterResult, g.PresentRate, g.AbsentRate, g.UndefinedRate) + "\n"
+	}
+	_ = c.SetTempData("semester_grades:"+semester.Id, text, defaultTextCacheTimeout)
+	return c.EditMessageWithInlineKB(text, tgmodel.GradesButtons(semester.Id))
 }
 
-func (r *scheduleRouter) callbackSubjectLessonsGrades(c bot.Context) error {
+func (r *scheduleRouter) callbackChooseSemesterSubject(c bot.Context) error {
+	semesterId := c.Param("semester_id")
+
 	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
-	var semester parser.Semester
-	if err = c.GetData("semester", &semester); err != nil {
-		return err
-	}
-	subjects, err := r.parser.FindSemesterSubjects(gi, semester)
+	semester, err := lookupSemester(c, r.parser, gi, semesterId)
 	if err != nil {
 		return err
 	}
-	_ = c.SetTempData("semester_subjects", subjects, defaultCacheTimeout)
-	kb := append(tgmodel.InlineRowButtons(subjects, 1), tgmodel.BackButton("/semester_grades_back")...)
-	if err = c.EditMessageWithInlineKB("Выберите предмет:", kb); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseSubject)
-}
-
-func (r *scheduleRouter) callbackChooseSubjectBack(c bot.Context) error {
 	var subjects map[string]string
-	if err := c.GetData("semester_subjects", &subjects); err == nil {
-		_ = c.DeleteInlineKB()
-		kb := append(tgmodel.InlineRowButtons(subjects, 1), tgmodel.BackButton("/semester_grades_back")...)
-		if e := c.SendMessageWithInlineKB("Выберите предмет:", kb); e != nil {
-			return e
+
+	// `subjects` сначала смотрим в кэше. Если не нашли/ошибка, то придется спрашивать у модеуса. Не забываем кэшировать
+	if err = c.GetData("semester_subjects"+semesterId, &subjects); err != nil {
+		subjects, err = r.parser.FindSemesterSubjects(gi, semester)
+		if err != nil {
+			return err
 		}
-		return c.SetState(stateChooseSubject)
+		_ = c.SetTempData("semester_subjects:"+semesterId, subjects, defaultCacheTimeout)
 	}
-	gi, err := lookupGI(c, r.user, true)
-	if err != nil {
-		return err
+
+	// коллбэк на просмотр посещений по предмету в формате /grades/subjects/:subject_id/:index
+	// можно было бы вместо index (номер семестра) запихнуть semesterId, но увы и ах: размер CallbackData <= 64 байта
+	buttons := make(map[string]string, len(subjects))
+	for k, v := range subjects {
+		key := fmt.Sprintf("/grades/subjects/%s/%d", k, semester.Number)
+		buttons[key] = v
 	}
-	var semester parser.Semester
-	if err = c.GetData("semester", &semester); err != nil {
-		return err
-	}
-	subjects, err = r.parser.FindSemesterSubjects(gi, semester)
-	if err != nil {
-		return err
-	}
-	_ = c.SetTempData("semester_subjects", subjects, defaultCacheTimeout)
-	_ = c.DeleteInlineKB()
-	if err = c.SendMessageWithInlineKB("Выберите предмет:", tgmodel.InlineRowButtons(subjects, 1)); err != nil {
-		return err
-	}
-	return c.SetState(stateChooseSubject)
+	kb := append(tgmodel.InlineRowButtons(buttons, 1), tgmodel.BackButton("/grades/semester/"+semester.Id)...)
+	return c.EditMessageWithInlineKB("Выберите предмет:", kb)
 }
 
-func (r *scheduleRouter) stateChooseSubject(c bot.Context) error {
+func (r *scheduleRouter) callbackSubjectDetailedInfo(c bot.Context) error {
+	// TODO кэшировать?
 	gi, err := lookupGI(c, r.user, true)
 	if err != nil {
 		return err
 	}
-	var semester parser.Semester
-	if err = c.GetData("semester", &semester); err != nil {
+	semesters, err := lookupSemesters(c, r.parser, gi)
+	if err != nil {
 		return err
 	}
-	subjectLessons, err := r.parser.SubjectDetailedInfo(gi, semester, c.Text())
+	s := semesters[len(semesters)-1] // делаем по умолчанию последний, чтобы не возвращать ошибку
+
+	// Из коллбэка находим номер семестра, идем циклом в попытке найти совпадение...
+	// P.S. цикл в обратную сторону, потому что чаще смотрят информацию о парах последнего (текущего) семестра
+	if index, err := strconv.Atoi(c.Param("index")); err == nil {
+		for i := len(semesters) - 1; i >= 0; i-- {
+			if semesters[i].Number == index {
+				s = semesters[i]
+				break
+			}
+		}
+	}
+
+	subjectLessons, err := r.parser.SubjectDetailedInfo(gi, s, c.Param("subject_id"))
 	if err != nil {
 		return err
 	}
@@ -344,5 +312,5 @@ func (r *scheduleRouter) stateChooseSubject(c bot.Context) error {
 			return err
 		}
 	}
-	return c.SendMessageWithInlineKB(messages[len(messages)-1], tgmodel.BackButton("/choose_subject_back"))
+	return c.SendMessageWithInlineKB(messages[len(messages)-1], tgmodel.BackButton(fmt.Sprintf("/grades/semester/%s/subjects", s.Id)))
 }

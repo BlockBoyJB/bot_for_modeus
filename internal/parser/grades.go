@@ -119,7 +119,7 @@ func (p *parser) DayGrades(day time.Time, gi GradesInput) ([]DayGrades, error) {
 	return result, nil
 }
 
-func (p *parser) FindAllSemesters(gi GradesInput) (map[string]Semester, error) {
+func (p *parser) FindAllSemesters(gi GradesInput) ([]Semester, error) {
 	resp, err := p.makeRequest(http.MethodPost, findSemestersUri, gi)
 	if err != nil {
 		return nil, err
@@ -129,23 +129,15 @@ func (p *parser) FindAllSemesters(gi GradesInput) (map[string]Semester, error) {
 	if err = parseBody(resp, &semesters); err != nil {
 		return nil, err
 	}
-	result := make(map[string]Semester, len(semesters))
-	for _, sem := range semesters {
-		result[sem.Id] = sem
-	}
-	return result, nil
+	return semesters, nil
 }
 
 func (p *parser) FindCurrentSemester(gi GradesInput) (Semester, error) {
-	resp, err := p.makeRequest(http.MethodPost, findSemestersUri, gi)
+	semesters, err := p.FindAllSemesters(gi)
 	if err != nil {
 		return Semester{}, err
 	}
 
-	var semesters []Semester
-	if err = parseBody(resp, &semesters); err != nil {
-		return Semester{}, err
-	}
 	if len(semesters) < 1 {
 		return Semester{}, errors.New("semesters not found")
 	}
@@ -161,7 +153,7 @@ func (p *parser) FindSemesterSubjects(gi GradesInput, semester Semester) (map[st
 		return nil, err
 	}
 
-	var result map[string]string
+	var result map[string]string // TODO сменить на слайс структур (чтобы был ordered)?
 	if err = parseBody(resp, &result); err != nil {
 		return nil, err
 	}

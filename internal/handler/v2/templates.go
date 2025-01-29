@@ -7,15 +7,11 @@ const (
 	stateAddLoginPassword  = "stateAddLoginPassword"
 	stateConfirmDelete     = "stateConfirmDelete"
 
-	stateChooseFriend     = "stateChooseFriend"
 	stateAddFriend        = "stateAddFriend"
 	stateChooseFindFriend = "stateChooseFindFriend"
 
 	stateInputOtherStudent  = "stateInputOtherStudent"
 	stateChooseOtherStudent = "stateChooseOtherStudent"
-
-	stateChooseSubject  = "stateChooseSubject"
-	stateChooseSemester = "stateChooseSemester"
 )
 
 const (

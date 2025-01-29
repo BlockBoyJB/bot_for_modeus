@@ -3,6 +3,7 @@ package tgmodel
 import (
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"math"
 	"strconv"
 	"time"
 )
@@ -97,14 +98,38 @@ func BackButton(callback string) [][]tgbotapi.InlineKeyboardButton {
 	return [][]tgbotapi.InlineKeyboardButton{{tgbotapi.NewInlineKeyboardButtonData(txtBackButton, callback)}}
 }
 
+type Button struct {
+	Text string
+	Data string
+}
+
+func CustomInlineRowButtons(data []Button, size int) [][]tgbotapi.InlineKeyboardButton {
+	// Ёмкость buttons - деление кол-во значений data на кол-во в ряду (size). Округляем вверх
+	buttons := make([][]tgbotapi.InlineKeyboardButton, 0, int(math.Ceil(float64(len(data))/float64(size))))
+	row := make([]tgbotapi.InlineKeyboardButton, 0, size)
+
+	for _, b := range data {
+		if len(row) >= size {
+			buttons = append(buttons, row)
+			row = make([]tgbotapi.InlineKeyboardButton, 0, size)
+		}
+		row = append(row, tgbotapi.NewInlineKeyboardButtonData(b.Text, b.Data))
+	}
+	if len(row) != 0 {
+		buttons = append(buttons, row)
+	}
+	return buttons
+}
+
 func InlineRowButtons(data map[string]string, size int) [][]tgbotapi.InlineKeyboardButton {
-	var buttons [][]tgbotapi.InlineKeyboardButton
-	var row []tgbotapi.InlineKeyboardButton
+	// Ёмкость buttons - деление кол-во значений data на кол-во в ряду (size). Округляем вверх
+	buttons := make([][]tgbotapi.InlineKeyboardButton, 0, int(math.Ceil(float64(len(data))/float64(size))))
+	row := make([]tgbotapi.InlineKeyboardButton, 0, size)
 
 	for k, v := range data {
 		if len(row) >= size {
 			buttons = append(buttons, row)
-			row = nil
+			row = make([]tgbotapi.InlineKeyboardButton, 0, size)
 		}
 		// инвертируем значения, потому что ключ не должен быть виден пользователю
 		row = append(row, tgbotapi.NewInlineKeyboardButtonData(v, k))

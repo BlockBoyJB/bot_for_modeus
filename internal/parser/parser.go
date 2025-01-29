@@ -27,7 +27,7 @@ type Parser interface {
 	Ratings(gi GradesInput) (string, []SemesterRatings, error)
 
 	FindCurrentSemester(gi GradesInput) (Semester, error)
-	FindAllSemesters(gi GradesInput) (map[string]Semester, error)
+	FindAllSemesters(gi GradesInput) ([]Semester, error)
 
 	FindSemesterSubjects(gi GradesInput, semester Semester) (map[string]string, error)
 	SubjectDetailedInfo(gi GradesInput, semester Semester, subjectId string) ([]LessonGrades, error)
