@@ -31,6 +31,9 @@ func errorMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
 		case errors.Is(err, parser.ErrModeusUnavailable):
 			return c.SendMessageWithInlineKB(txtModeusUnavailable, tgmodel.ScheduleLink)
 
+		case errors.Is(err, parser.ErrIncorrectLoginPassword):
+			return c.SendMessage(txtIncorrectLoginPass)
+
 		case errors.Is(err, parser.ErrStudentsNotFound):
 			return c.SendMessage(fmt.Sprintf(txtStudentNotFound, c.Text()))
 
