@@ -51,7 +51,7 @@ func (s *userService) Create(ctx context.Context, input UserInput) error {
 		FullName:   input.FullName,
 		ScheduleId: input.ScheduleId,
 		GradesId:   input.GradesId,
-		Friends:    map[string]string{},
+		Friends:    []dbmodel.Friend{},
 	})
 	if err != nil {
 		log.Errorf("%s/Create error create user: %s", userServicePrefixLog, err)
@@ -69,14 +69,21 @@ func (s *userService) Find(ctx context.Context, userId int64) (UserOutput, error
 		log.Errorf("%s/Find error find user: %s", userServicePrefixLog, err)
 		return UserOutput{}, err
 	}
-	return UserOutput{
+	o := UserOutput{
 		FullName:   u.FullName,
 		Login:      u.Login,
 		Password:   u.Password,
 		ScheduleId: u.ScheduleId,
 		GradesId:   u.GradesId,
-		Friends:    u.Friends,
-	}, nil
+		Friends:    make([]FriendOutput, 0, len(u.Friends)),
+	}
+	for _, f := range u.Friends {
+		o.Friends = append(o.Friends, FriendOutput{
+			FullName:   f.FullName,
+			ScheduleId: f.ScheduleId,
+		})
+	}
+	return o, nil
 }
 
 func (s *userService) UpdateLoginPassword(ctx context.Context, input UserLoginPasswordInput) error {
@@ -127,7 +134,10 @@ func (s *userService) Delete(ctx context.Context, userId int64) error {
 }
 
 func (s *userService) AddFriend(ctx context.Context, input FriendInput) error {
-	update := bson.D{{"$set", bson.D{{"friends." + input.ScheduleId, input.FullName}}}}
+	update := bson.D{{"$push", bson.M{"friends": dbmodel.Friend{
+		FullName:   input.FullName,
+		ScheduleId: input.ScheduleId,
+	}}}}
 	if err := s.user.Update(ctx, input.UserId, update); err != nil {
 		if errors.Is(err, mongoerrs.ErrNotFound) {
 			return ErrUserNotFound
@@ -139,7 +149,9 @@ func (s *userService) AddFriend(ctx context.Context, input FriendInput) error {
 }
 
 func (s *userService) DeleteFriend(ctx context.Context, input FriendInput) error {
-	update := bson.D{{"$unset", bson.D{{"friends." + input.ScheduleId, ""}}}}
+	// Нужно удалить объект из массива friends по совпадению schedule_id
+	update := bson.D{{"$pull", bson.M{"friends": bson.M{"schedule_id": input.ScheduleId}}}}
+
 	if err := s.user.Update(ctx, input.UserId, update); err != nil {
 		if errors.Is(err, mongoerrs.ErrNotFound) {
 			return ErrUserNotFound

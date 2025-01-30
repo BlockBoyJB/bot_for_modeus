@@ -148,6 +148,18 @@ func studentSchedule(c bot.Context, p parser.Parser, prefix string, backKB [][]t
 	return c.EditMessageWithInlineKB(text, kb)
 }
 
+// Вынес клавиатуру с друзьями сюда, чтобы сразу работать с FriendOutput, а не tgmodel.Button
+func friendsButtons(friends []service.FriendOutput) [][]tgbotapi.InlineKeyboardButton {
+	buttons := make([][]tgbotapi.InlineKeyboardButton, 0, len(friends)+1)
+
+	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{tgbotapi.NewInlineKeyboardButtonData("Добавить друга", "/add_friend")})
+
+	for _, f := range friends {
+		buttons = append(buttons, []tgbotapi.InlineKeyboardButton{tgbotapi.NewInlineKeyboardButtonData(f.FullName, "/friends/choose/"+f.ScheduleId)})
+	}
+	return buttons
+}
+
 // Отдельно сохраняем все когда-либо использованные пользователем ФИО.
 // К сожалению, телеграм имеет ограничение на размер callback data (64 байта) (сделали хотя бы 1kb!!!!).
 // Поэтому идея сделать коллбэк на расписание в формате "тип/дата/scheduleId/ФИО" обернулась крахом.
@@ -211,7 +223,7 @@ func lookupGI(c bot.Context, u service.User, decrypt bool) (gi parser.GradesInpu
 	return
 }
 
-func lookupFriends(c bot.Context, u service.User) (friends map[string]string, err error) {
+func lookupFriends(c bot.Context, u service.User) (friends []service.FriendOutput, err error) {
 	if err = c.GetData("friends", &friends); err == nil {
 		return
 	}

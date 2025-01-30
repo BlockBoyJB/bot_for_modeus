@@ -20,7 +20,7 @@ type (
 		Password   string
 		ScheduleId string
 		GradesId   string
-		Friends    map[string]string
+		Friends    []FriendOutput
 	}
 	UserLoginPasswordInput struct {
 		UserId   int64
@@ -31,6 +31,10 @@ type (
 		UserId     int64
 		FullName   string
 		ScheduleId string
+	}
+	FriendOutput struct {
+		FullName   string `json:"full_name"`
+		ScheduleId string `json:"schedule_id"`
 	}
 )
 

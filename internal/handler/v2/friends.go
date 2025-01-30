@@ -43,7 +43,7 @@ func (r *friendsRouter) cmdFriends(c bot.Context) error {
 		text = "Ой! Кажется, у Вас ни одного сохраненного друга!"
 	}
 
-	return c.SendMessageWithInlineKB(text, tgmodel.FriendsButtons(friends))
+	return c.SendMessageWithInlineKB(text, friendsButtons(friends))
 }
 
 func (r *friendsRouter) callbackChooseFriendBack(c bot.Context) error {
@@ -55,7 +55,7 @@ func (r *friendsRouter) callbackChooseFriendBack(c bot.Context) error {
 	if len(friends) == 0 {
 		text = "Ой! Кажется, у Вас ни одного сохраненного друга!"
 	}
-	return c.EditMessageWithInlineKB(text, tgmodel.FriendsButtons(friends))
+	return c.EditMessageWithInlineKB(text, friendsButtons(friends))
 }
 
 func (r *friendsRouter) callbackChooseFriend(c bot.Context) error {
@@ -79,6 +79,15 @@ func (r *friendsRouter) callbackChooseFriendActionBack(c bot.Context) error {
 func (r *friendsRouter) callbackDeleteFriend(c bot.Context) error {
 	scheduleId := c.Param("schedule_id")
 
+	// Сначала надо удалить всех друзей из кэша, а потом из бд, чтобы гарантировать консистентность данных.
+	// Есть риск того, что сломаться может где-то "посередине" и данные в кэше и бд будут расходиться.
+	// Например, удалили из бд, но при изменении в кэше произошла ошибка и старое значение осталось - печальный исход.
+	// Поэтому удаляем сразу всех
+
+	if err := c.DelData("friends"); err != nil {
+		return err
+	}
+
 	err := r.user.DeleteFriend(c.Context(), service.FriendInput{
 		UserId:     c.UserId(),
 		ScheduleId: scheduleId,
@@ -87,17 +96,12 @@ func (r *friendsRouter) callbackDeleteFriend(c bot.Context) error {
 		return err
 	}
 
-	var friends map[string]string
-	if err = c.GetData("friends", &friends); err != nil {
-		return err
-	}
-	fullName := friends[scheduleId]
-	delete(friends, scheduleId)
-	if err = c.SetData("friends", friends); err != nil {
+	fullName, err := getFullName(c, r.parser, scheduleId)
+	if err != nil {
 		return err
 	}
 
-	return c.EditMessage(fmt.Sprintf("<b>%s</b> удален из друзей!", fullName))
+	return c.EditMessageWithInlineKB(fmt.Sprintf("<b>%s</b> удален из друзей!", fullName), tgmodel.BackButton("/choose_friend_back"))
 }
 
 func (r *friendsRouter) callbackFriendsSchedule(c bot.Context) error {
@@ -136,7 +140,9 @@ func (r *friendsRouter) stateChooseFindFriend(c bot.Context) error {
 	if err != nil {
 		return err
 	}
-	if err = c.DelData("students"); err != nil {
+
+	// Удаляем друзей из кэша, чтобы гарантировать консистентность (более подробно в функции callbackDeleteFriend)
+	if err = c.DelData("students", "friends"); err != nil {
 		return err
 	}
 
@@ -145,15 +151,6 @@ func (r *friendsRouter) stateChooseFindFriend(c bot.Context) error {
 		FullName:   s.FullName,
 		ScheduleId: s.ScheduleId,
 	}); err != nil {
-		return err
-	}
-
-	var friends map[string]string
-	if err = c.GetData("friends", &friends); err != nil {
-		return err
-	}
-	friends[s.ScheduleId] = s.FullName
-	if err = c.SetData("friends", friends); err != nil {
 		return err
 	}
 

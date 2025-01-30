@@ -45,7 +45,7 @@ func TestUserService_Create(t *testing.T) {
 					FullName:   a.input.FullName,
 					ScheduleId: a.input.ScheduleId,
 					GradesId:   a.input.GradesId,
-					Friends:    map[string]string{},
+					Friends:    []dbmodel.Friend{},
 				}).Return(nil)
 			},
 			expectErr: nil,
@@ -84,7 +84,7 @@ func TestUserService_Create(t *testing.T) {
 					FullName:   a.input.FullName,
 					ScheduleId: a.input.ScheduleId,
 					GradesId:   a.input.GradesId,
-					Friends:    map[string]string{},
+					Friends:    []dbmodel.Friend{},
 				}).Return(errors.New("unexpected error"))
 			},
 			expectErr: errors.New("unexpected error"),
@@ -151,7 +151,16 @@ func TestUserService_Find(t *testing.T) {
 					Password:   "crypt_password",
 					ScheduleId: "foobar",
 					GradesId:   "foobar",
-					Friends:    map[string]string{},
+					Friends: []dbmodel.Friend{
+						{
+							FullName:   "Иванов Иван Иванович",
+							ScheduleId: "a07bd176-2cea-405a-8f69-baa82c28f089",
+						},
+						{
+							FullName:   "Петров Петр Петрович",
+							ScheduleId: "cecea70d-809b-4b5c-89eb-75de829352ea",
+						},
+					},
 				}, nil)
 			},
 			expectOutput: UserOutput{
@@ -160,7 +169,16 @@ func TestUserService_Find(t *testing.T) {
 				Password:   "crypt_password",
 				ScheduleId: "foobar",
 				GradesId:   "foobar",
-				Friends:    map[string]string{},
+				Friends: []FriendOutput{
+					{
+						FullName:   "Иванов Иван Иванович",
+						ScheduleId: "a07bd176-2cea-405a-8f69-baa82c28f089",
+					},
+					{
+						FullName:   "Петров Петр Петрович",
+						ScheduleId: "cecea70d-809b-4b5c-89eb-75de829352ea",
+					},
+				},
 			},
 			expectErr: nil,
 		},
@@ -187,14 +205,14 @@ func TestUserService_Find(t *testing.T) {
 					FullName:   "vasya",
 					ScheduleId: "foobar",
 					GradesId:   "foobar",
-					Friends:    map[string]string{},
+					Friends:    []dbmodel.Friend{},
 				}, nil)
 			},
 			expectOutput: UserOutput{
 				FullName:   "vasya",
 				ScheduleId: "foobar",
 				GradesId:   "foobar",
-				Friends:    map[string]string{},
+				Friends:    []FriendOutput{},
 			},
 			expectErr: nil,
 		},
@@ -523,7 +541,10 @@ func TestUserService_AddFriend(t *testing.T) {
 			},
 			mockBehaviour: func(u *repomocks.MockUser, a args) {
 				u.EXPECT().Update(a.ctx, a.input.UserId,
-					bson.D{{"$set", bson.D{{"friends." + a.input.ScheduleId, a.input.FullName}}}}).
+					bson.D{{"$push", bson.M{"friends": dbmodel.Friend{
+						FullName:   a.input.FullName,
+						ScheduleId: a.input.ScheduleId,
+					}}}}).
 					Return(nil)
 			},
 			expectErr: nil,
@@ -540,7 +561,10 @@ func TestUserService_AddFriend(t *testing.T) {
 			},
 			mockBehaviour: func(u *repomocks.MockUser, a args) {
 				u.EXPECT().Update(a.ctx, a.input.UserId,
-					bson.D{{"$set", bson.D{{"friends." + a.input.ScheduleId, a.input.FullName}}}}).
+					bson.D{{"$push", bson.M{"friends": dbmodel.Friend{
+						FullName:   a.input.FullName,
+						ScheduleId: a.input.ScheduleId,
+					}}}}).
 					Return(mongoerrs.ErrNotFound)
 			},
 			expectErr: ErrUserNotFound,
@@ -557,7 +581,10 @@ func TestUserService_AddFriend(t *testing.T) {
 			},
 			mockBehaviour: func(u *repomocks.MockUser, a args) {
 				u.EXPECT().Update(a.ctx, a.input.UserId,
-					bson.D{{"$set", bson.D{{"friends." + a.input.ScheduleId, a.input.FullName}}}}).
+					bson.D{{"$push", bson.M{"friends": dbmodel.Friend{
+						FullName:   a.input.FullName,
+						ScheduleId: a.input.ScheduleId,
+					}}}}).
 					Return(errors.New("unexpected error"))
 			},
 			expectErr: errors.New("unexpected error"),
@@ -604,7 +631,7 @@ func TestUserService_DeleteFriend(t *testing.T) {
 			},
 			mockBehaviour: func(u *repomocks.MockUser, a args) {
 				u.EXPECT().Update(a.ctx, a.input.UserId,
-					bson.D{{"$unset", bson.D{{"friends." + a.input.ScheduleId, ""}}}}).
+					bson.D{{"$pull", bson.M{"friends": bson.M{"schedule_id": a.input.ScheduleId}}}}).
 					Return(nil)
 			},
 			expectErr: nil,
@@ -620,7 +647,7 @@ func TestUserService_DeleteFriend(t *testing.T) {
 			},
 			mockBehaviour: func(u *repomocks.MockUser, a args) {
 				u.EXPECT().Update(a.ctx, a.input.UserId,
-					bson.D{{"$unset", bson.D{{"friends." + a.input.ScheduleId, ""}}}}).
+					bson.D{{"$pull", bson.M{"friends": bson.M{"schedule_id": a.input.ScheduleId}}}}).
 					Return(mongoerrs.ErrNotFound)
 			},
 			expectErr: ErrUserNotFound,
@@ -636,7 +663,7 @@ func TestUserService_DeleteFriend(t *testing.T) {
 			},
 			mockBehaviour: func(u *repomocks.MockUser, a args) {
 				u.EXPECT().Update(a.ctx, a.input.UserId,
-					bson.D{{"$unset", bson.D{{"friends." + a.input.ScheduleId, ""}}}}).
+					bson.D{{"$pull", bson.M{"friends": bson.M{"schedule_id": a.input.ScheduleId}}}}).
 					Return(errors.New("unexpected error"))
 			},
 			expectErr: errors.New("unexpected error"),
