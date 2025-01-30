@@ -5,6 +5,7 @@ import (
 	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/internal/service"
 	"bot_for_modeus/pkg/bot"
+	"context"
 	"errors"
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -168,12 +169,26 @@ func getFullName(c bot.Context, p parser.Parser, scheduleId string) (fullName st
 	if err = c.GetCommonData("full_name:"+scheduleId, &fullName); err == nil {
 		return
 	}
-	s, err := p.FindStudentById(scheduleId)
+
+	// Есть необходимость использовать паттерн singleflight, потому что ФИО студента - общая информация.
+	// Если не найдем ее в кэше - будет много запросов в модеус с одними и теми же данными.
+	// P.S. кого я обманываю, никто не будет пользоваться этим одновременно, ведь у меня 10 человек онлайна
+
+	ctx, cancel := context.WithTimeout(c.Context(), time.Second*7)
+	defer cancel()
+
+	result, err := c.DoOnce(ctx, "full_name:"+scheduleId, func() (any, error) {
+		s, err := p.FindStudentById(scheduleId)
+		if err != nil {
+			return nil, err
+		}
+		_ = c.SetCommonData("full_name:"+s.ScheduleId, s.FullName, 0)
+		return s.FullName, nil
+	})
 	if err != nil {
 		return "", err
 	}
-	_ = c.SetCommonData("full_name:"+s.ScheduleId, s.FullName, 0)
-	return s.FullName, nil
+	return result.(string), nil
 }
 
 // Функция возвращает основную структуру для работы с пользователем - GradesInput (в которой scheduleId, gradesId, login, password).

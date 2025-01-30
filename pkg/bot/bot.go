@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"bot_for_modeus/pkg/singleflight"
 	"context"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"log"
@@ -28,6 +29,7 @@ type Bot struct {
 	storage    storage
 	logger     Logger
 	stop       chan bool
+	once       *singleflight.Flight
 	isWebhook  bool
 }
 
@@ -54,6 +56,7 @@ func NewBot(s *Settings, opts ...Option) (*Bot, error) {
 		storage:   newMemoryStorage(),
 		logger:    log.New(os.Stdout, "/bot", 4),
 		stop:      make(chan bool),
+		once:      singleflight.NewFlight(),
 		isWebhook: s.IsWebhook,
 	}
 	for _, option := range opts {

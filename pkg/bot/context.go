@@ -40,6 +40,9 @@ type Context interface {
 	DelData(keys ...string) error
 	DelCommonData(keys ...string) error
 	Clear() error
+
+	// DoOnce implements singleflight pattern
+	DoOnce(ctx context.Context, key string, f func() (any, error)) (any, error)
 }
 
 type nativeContext struct {
@@ -199,4 +202,8 @@ func (c *nativeContext) DelCommonData(keys ...string) error {
 
 func (c *nativeContext) Clear() error {
 	return c.bot.storage.clear(c.UserId())
+}
+
+func (c *nativeContext) DoOnce(ctx context.Context, key string, f func() (any, error)) (any, error) {
+	return c.bot.once.Do(ctx, key, f)
 }
