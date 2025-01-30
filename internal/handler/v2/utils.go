@@ -13,8 +13,29 @@ import (
 	"time"
 )
 
+// Для данных, которые в кэше используются в качестве ускорения работы, вешаем таймауты хранения.
+// Нам не нужно хранить данные пользователей в кэше, которые единожды воспользовались ботом и больше не используют
+const (
+	defaultCacheTimeout     = time.Hour
+	textCacheTimeout        = time.Minute * 12
+	gradesInputCacheTimeout = time.Hour * 24 * 14
+	fullNameCacheTimeout    = time.Hour * 24 * 7
+	friendsCacheTimeout     = time.Hour * 24 * 7
+	semesterCacheTimeout    = time.Hour * 12
+)
+
 var (
 	defaultLocation, _ = time.LoadLocation("Asia/Yekaterinburg") // По умолчанию GMT+5 (время в Тюмени)
+
+	dates = map[int]string{
+		1: "Понедельник",
+		2: "Вторник",
+		3: "Среда",
+		4: "Четверг",
+		5: "Пятница",
+		6: "Суббота",
+		7: "Воскресенье",
+	}
 )
 
 func formatStudents(students []parser.Student) (string, [][]tgbotapi.InlineKeyboardButton) {
@@ -182,7 +203,7 @@ func getFullName(c bot.Context, p parser.Parser, scheduleId string) (fullName st
 		if err != nil {
 			return nil, err
 		}
-		_ = c.SetCommonData("full_name:"+s.ScheduleId, s.FullName, 0)
+		_ = c.SetCommonData("full_name:"+s.ScheduleId, s.FullName, fullNameCacheTimeout)
 		return s.FullName, nil
 	})
 	if err != nil {
@@ -227,7 +248,7 @@ func lookupGI(c bot.Context, u service.User, decrypt bool) (gi parser.GradesInpu
 	}
 	// Тут необязательно возвращать ошибку, поскольку grades input у нас есть,
 	// однако нагрузка на бд возрастет с количеством несохраненных gi в кэш
-	_ = c.SetData("grades_input", gi)
+	_ = c.SetTempData("grades_input", gi, gradesInputCacheTimeout)
 
 	if gi.Password != "" && decrypt {
 		gi.Password, err = u.Decrypt(gi.Password)
@@ -246,7 +267,7 @@ func lookupFriends(c bot.Context, u service.User) (friends []service.FriendOutpu
 	if err != nil {
 		return nil, err
 	}
-	_ = c.SetData("friends", user.Friends)
+	_ = c.SetTempData("friends", user.Friends, friendsCacheTimeout)
 	return user.Friends, nil
 }
 
@@ -262,7 +283,7 @@ func lookupSemesters(c bot.Context, p parser.Parser, gi parser.GradesInput) ([]p
 	if len(semesters) == 0 {
 		return nil, errors.New("lookupSemesters: cannot find semesters from modeus")
 	}
-	_ = c.SetTempData("semesters", semesters, defaultCacheTimeout)
+	_ = c.SetTempData("semesters", semesters, semesterCacheTimeout)
 	return semesters, nil
 }
 
@@ -277,12 +298,12 @@ func lookupSemester(c bot.Context, p parser.Parser, gi parser.GradesInput, semes
 	}
 	if semesterId == "" {
 		semester = semesters[len(semesters)-1]
-		_ = c.SetTempData("semester:"+semester.Id, semester, defaultCacheTimeout)
+		_ = c.SetTempData("semester:"+semester.Id, semester, semesterCacheTimeout)
 		return
 	}
 	for _, s := range semesters {
 		if s.Id == semesterId {
-			_ = c.SetTempData("semester:"+s.Id, s, defaultCacheTimeout)
+			_ = c.SetTempData("semester:"+s.Id, s, semesterCacheTimeout)
 			return s, nil
 		}
 	}

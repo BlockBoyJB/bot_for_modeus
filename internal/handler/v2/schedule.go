@@ -11,23 +11,6 @@ import (
 	"time"
 )
 
-const (
-	// Решил кэшировать некоторые данные (в частности текст) в разделе оценок, потому что их повторное обновление очень долгое
-	// Время кэширования небольшое из расчета на то, что эти данные не успеют измениться за этот промежуток
-	defaultTextCacheTimeout = time.Minute * 7
-	defaultCacheTimeout     = time.Hour
-)
-
-var dates = map[int]string{
-	1: "Понедельник",
-	2: "Вторник",
-	3: "Среда",
-	4: "Четверг",
-	5: "Пятница",
-	6: "Суббота",
-	7: "Воскресенье",
-}
-
 type scheduleRouter struct {
 	user   service.User
 	parser parser.Parser
@@ -172,7 +155,7 @@ func (r *scheduleRouter) cmdGrades(c bot.Context) error {
 	for _, subjectGrades := range grades {
 		text += "\n" + fmt.Sprintf(formatSemesterGrades, subjectGrades.Status, subjectGrades.Name, subjectGrades.CurrentResult, subjectGrades.SemesterResult, subjectGrades.PresentRate, subjectGrades.AbsentRate, subjectGrades.UndefinedRate) + "\n"
 	}
-	_ = c.SetTempData("semester_grades:"+semester.Id, text, defaultTextCacheTimeout)
+	_ = c.SetTempData("semester_grades:"+semester.Id, text, textCacheTimeout)
 	return c.SendMessageWithInlineKB(text, tgmodel.GradesButtons(semester.Id))
 }
 
@@ -224,7 +207,7 @@ func (r *scheduleRouter) callbackSemesterGrades(c bot.Context) error {
 	for _, g := range grades {
 		text += "\n" + fmt.Sprintf(formatSemesterGrades, g.Status, g.Name, g.CurrentResult, g.SemesterResult, g.PresentRate, g.AbsentRate, g.UndefinedRate) + "\n"
 	}
-	_ = c.SetTempData("semester_grades:"+semester.Id, text, defaultTextCacheTimeout)
+	_ = c.SetTempData("semester_grades:"+semester.Id, text, textCacheTimeout)
 	return c.EditMessageWithInlineKB(text, tgmodel.GradesButtons(semester.Id))
 }
 
@@ -242,7 +225,7 @@ func (r *scheduleRouter) callbackChooseSemesterSubject(c bot.Context) error {
 	var subjects map[string]string
 
 	// `subjects` сначала смотрим в кэше. Если не нашли/ошибка, то придется спрашивать у модеуса. Не забываем кэшировать
-	if err = c.GetData("semester_subjects"+semesterId, &subjects); err != nil {
+	if err = c.GetData("semester_subjects:"+semesterId, &subjects); err != nil {
 		subjects, err = r.parser.FindSemesterSubjects(gi, semester)
 		if err != nil {
 			return err
