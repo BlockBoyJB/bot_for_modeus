@@ -113,7 +113,7 @@ func (r *scheduleRouter) callbackUserSchedule(c bot.Context) error {
 			return e
 		}
 
-		text = fmt.Sprintf("Вот все оценки за %s:", day.Format("02.01"))
+		text = fmt.Sprintf("Оценки на <b>%d %s</b>:\n", day.Day(), months[day.Month()])
 		for _, grade := range grades {
 			text += "\n" + fmt.Sprintf(formatDayGrades, grade.Time, grade.Subject, grade.Name, grade.Type, grade.Attendance, grade.Grades)
 		}

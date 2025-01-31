@@ -36,6 +36,21 @@ var (
 		6: "Суббота",
 		7: "Воскресенье",
 	}
+
+	months = map[time.Month]string{
+		time.January:   "января",
+		time.February:  "февраля",
+		time.March:     "марта",
+		time.April:     "апреля",
+		time.May:       "мая",
+		time.June:      "июня",
+		time.July:      "июля",
+		time.August:    "августа",
+		time.September: "сентября",
+		time.October:   "октября",
+		time.November:  "ноября",
+		time.December:  "декабря",
+	}
 )
 
 func formatStudents(students []parser.Student) (string, [][]tgbotapi.InlineKeyboardButton) {
@@ -95,12 +110,12 @@ func studentDaySchedule(parser parser.Parser, now time.Time, scheduleId, prefix 
 		return "", nil, err
 	}
 
-	text := fmt.Sprintf("Расписание на %s:", now.Format("02.01"))
+	text := fmt.Sprintf("Расписание на <b>%d %s</b>:\n", now.Day(), months[now.Month()])
 	for _, lesson := range schedule {
 		text += "\n" + fmt.Sprintf(formatLesson, lesson.Time, lesson.Subject, lesson.Name, lesson.Type, lesson.AuditoriumNum, lesson.BuildingAddr, lesson.Lector) + "\n"
 	}
 	if len(schedule) == 0 {
-		text = fmt.Sprintf("На %s занятий нет!", now.Format("02.01"))
+		text = fmt.Sprintf("На <b>%d %s</b> занятий нет!", now.Day(), months[now.Month()])
 	}
 	return text, tgmodel.DayScheduleButtons(now, scheduleId, prefix), nil
 }
@@ -116,10 +131,10 @@ func studentWeekSchedule(parser parser.Parser, now time.Time, scheduleId, prefix
 	weekStart := time.Date(now.Year(), now.Month(), start, 0, 0, 0, 0, now.Location())
 	weekEnd := time.Date(now.Year(), now.Month(), start+6, 0, 0, 0, 0, now.Location())
 
-	text := fmt.Sprintf("Расписание на неделю %s - %s:\n", weekStart.Format("02.01"), weekEnd.Format("02.01"))
+	text := fmt.Sprintf("Расписание на <b>%d %s - %d %s</b>:\n", weekStart.Day(), months[weekStart.Month()], weekEnd.Day(), months[weekEnd.Month()])
 
 	for d := 1; d <= 6; d++ {
-		text += fmt.Sprintf("\n<b><i>%s</i></b>:", dates[d])
+		text += fmt.Sprintf("\n<b><i>%s %s</i></b>:", dates[d], weekStart.AddDate(0, 0, d-1).Format("02.01"))
 		if len(schedule[d]) == 0 {
 			text += "\nЗанятий нет\n"
 			continue
