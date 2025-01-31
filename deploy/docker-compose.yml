@@ -10,7 +10,6 @@ services:
         condition: service_started
     volumes:
       - ./logs:/logs
-      - ${MONGO_CERTS}:/certs/mongodb
     env_file:
       - .env
     networks:
@@ -19,13 +18,8 @@ services:
   mongo:
     container_name: bot-mongo
     image: mongo:5.0-rc-focal
-    ports:
-      - "27017:27017"
     volumes:
       - ./dbdata:/data/db
-      - ./mongod.conf:/etc/mongod.conf
-      - ${MONGO_CERTS}:/etc/ssl/mongo
-    command: --config /etc/mongod.conf
     env_file:
       - .env
     networks:
@@ -34,9 +28,8 @@ services:
   parser:
     container_name: bot-parser
     image: ${PARSER_IMAGE}
-    environment:
-      HTTP_PORT: ${PARSER_HTTP_PORT}
-      REDIS_URL: ${REDIS_URL}
+    env_file:
+      - .env
     volumes:
       - ./logs/parser:/logs
     networks:
