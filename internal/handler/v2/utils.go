@@ -25,7 +25,7 @@ const (
 )
 
 var (
-	defaultLocation, _ = time.LoadLocation("Asia/Yekaterinburg") // По умолчанию GMT+5 (время в Тюмени)
+	defaultLocation = time.FixedZone("Tyumen", 5*60*60) // По умолчанию GMT+5 (время в Тюмени)
 
 	dates = map[int]string{
 		1: "Понедельник",
