@@ -22,7 +22,7 @@ func (s *mongodbTestSuite) TestUserRepo_Create() {
 				Password:   "password",
 				ScheduleId: "abc",
 				GradesId:   "abc",
-				Friends:    make(map[string]string),
+				Friends:    []dbmodel.Friend{},
 			},
 			expectErr: nil,
 		},
@@ -50,7 +50,16 @@ func (s *mongodbTestSuite) TestUserRepo_FindById() {
 		Password:   "password",
 		ScheduleId: "abc",
 		GradesId:   "abc",
-		Friends:    make(map[string]string),
+		Friends: []dbmodel.Friend{
+			{
+				FullName:   "Иванов Иван Иванович",
+				ScheduleId: "a07bd176-2cea-405a-8f69-baa82c28f089",
+			},
+			{
+				FullName:   "Петров Петр Петрович",
+				ScheduleId: "cecea70d-809b-4b5c-89eb-75de829352ea",
+			},
+		},
 	}
 	if _, err := s.user.pool.InsertOne(s.ctx, user); err != nil {
 		panic(err)
@@ -90,7 +99,16 @@ func (s *mongodbTestSuite) TestUserRepo_Update() {
 		Password:   "password",
 		ScheduleId: "abc",
 		GradesId:   "abc",
-		Friends:    make(map[string]string),
+		Friends: []dbmodel.Friend{
+			{
+				FullName:   "Иванов Иван Иванович",
+				ScheduleId: "a07bd176-2cea-405a-8f69-baa82c28f089",
+			},
+			{
+				FullName:   "Петров Петр Петрович",
+				ScheduleId: "cecea70d-809b-4b5c-89eb-75de829352ea",
+			},
+		},
 	}
 	if _, err := s.user.pool.InsertOne(s.ctx, user); err != nil {
 		panic(err)
@@ -147,7 +165,7 @@ func (s *mongodbTestSuite) TestUserRepo_Delete() {
 		Password:   "password",
 		ScheduleId: "abc",
 		GradesId:   "abc",
-		Friends:    make(map[string]string),
+		Friends:    []dbmodel.Friend{},
 	}
 	if _, err := s.user.pool.InsertOne(s.ctx, user); err != nil {
 		panic(err)
