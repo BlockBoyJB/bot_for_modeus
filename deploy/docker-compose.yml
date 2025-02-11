@@ -35,6 +35,14 @@ services:
     networks:
       - bot
 
+  tokenparser:
+    container_name: bot-token
+    image: ${TOKENPARSER_IMAGE}
+    env_file:
+      - .env
+    networks:
+      - bot
+
   redis:
     container_name: bot-redis
     image: redis:latest
