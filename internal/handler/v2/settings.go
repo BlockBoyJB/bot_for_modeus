@@ -5,8 +5,6 @@ import (
 	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/internal/service"
 	"bot_for_modeus/pkg/bot"
-	"errors"
-	"strings"
 )
 
 var (
@@ -49,26 +47,7 @@ func (r *settingsRouter) callbackAddLoginPassword(c bot.Context) error {
 }
 
 func (r *settingsRouter) stateAddLoginPassword(c bot.Context) error {
-	data := strings.Fields(c.Text())
-	if len(data) != 2 {
-		return c.SendMessage(txtIncorrectLoginPassInput)
-	}
-
-	if err := c.DelData("grades_input"); err != nil { // сначала важно удалить старые данные из кэша
-		return err
-	}
-	err := r.user.UpdateLoginPassword(c.Context(), service.UserLoginPasswordInput{
-		UserId:   c.UserId(),
-		Login:    data[0],
-		Password: data[1],
-	})
-	if err != nil {
-		if errors.Is(err, service.ErrUserIncorrectLogin) {
-			return c.SendMessage(txtIncorrectLoginPassInput)
-		}
-		return err
-	}
-	if err = c.DeleteLastMessage(); err != nil {
+	if err := addLoginPassword(c, r.user); err != nil {
 		return err
 	}
 	_ = c.DelData("state")

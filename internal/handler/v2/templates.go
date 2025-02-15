@@ -1,11 +1,12 @@
 package v2
 
 const (
-	stateInputFullName     = "stateInputFullName"
-	stateChooseStudent     = "stateChooseStudent"
-	stateActionAfterCreate = "stateActionAfterCreate"
-	stateAddLoginPassword  = "stateAddLoginPassword"
-	stateConfirmDelete     = "stateConfirmDelete"
+	stateInputFullName               = "stateInputFullName"
+	stateChooseStudent               = "stateChooseStudent"
+	stateActionAfterCreate           = "stateActionAfterCreate"
+	stateAddLoginPasswordAfterCreate = "stateAddLoginPasswordAfterCreate"
+	stateAddLoginPassword            = "stateAddLoginPassword"
+	stateConfirmDelete               = "stateConfirmDelete"
 
 	stateAddFriend        = "stateAddFriend"
 	stateChooseFindFriend = "stateChooseFindFriend"
@@ -21,6 +22,7 @@ const (
 	txtStart              = "👋 Привет!\nЯ умею получать расписание и оценки из модеуса!\nНапишите Ваше <b>ФИО без ошибок, как указано в модеусе</b>, чтобы мы смогли найти Вас!"
 	txtStudentNotFound    = "Ой! Никого не могу найти с ФИО \"%s\".\nПожалуйста, <b>введите ФИО точно как указано в модеусе</b> (возможно ошибка с буквами е и ё)"
 	txtUserCreated        = "<b><i>Пользователь успешно создан</i></b>!\n\n<b>Добавить логин и пароль от модеуса</b>? Это откроет доступ к <b>разделу оценок</b>\nЕсли нет - <i>сможете смотреть только расписание</i>"
+	txtUserAfterCreate    = "<b>Нажмите на любую из кнопок на клавиатуре или меню, чтобы воспользоваться ботом!\n\nРекомендуем ознакомится с гайдом, который мы сделали для удобства использования!</b>"
 	txtAddLoginPassword   = "Пожалуйста, укажите через пробел сначала логин, потом пароль от учетной записи модеуса"
 	txtRequiredLoginPass  = "<b>Требуется логин и пароль</b> от модеуса для входа в систему\n\n/settings -> \"Добавить логин и пароль\""
 	txtIncorrectLoginPass = "Ой! Кажется, <b>Вы ввели логин или пароль с ошибкой</b>!\nПожалуйста измените его в настройках! (/settings)"

@@ -52,7 +52,10 @@ var MyProfileButtons = [][]tgbotapi.InlineKeyboardButton{
 	{tgbotapi.NewInlineKeyboardButtonData("Обо мне", "/about_me"), tgbotapi.NewInlineKeyboardButtonData("Рейтинги", "/ratings")},
 }
 
+var GuideButtons = [][]tgbotapi.InlineKeyboardButton{{tgbotapi.NewInlineKeyboardButtonURL("👨‍💻 Руководство использования", "https://telegra.ph/Modeus-bot-gajd-02-14")}}
+
 var HelpButtons = [][]tgbotapi.InlineKeyboardButton{
+	GuideButtons[0],
 	{
 		tgbotapi.NewInlineKeyboardButtonData("🗓 Расписание", "/help_schedule"),
 		tgbotapi.NewInlineKeyboardButtonData("📊 Оценки", "/help_grades"),

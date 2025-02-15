@@ -10,6 +10,7 @@ import (
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -332,4 +333,30 @@ func parseSemesterDate(d string) string {
 		return d
 	}
 	return t.Format("02.01.2006")
+}
+
+// Функция добавляет/обновляет логин и пароль пользователя.
+// Отправляет сообщения об ошибках ввода.
+// Удаляет сообщение от пользователя с введенным логином и паролем
+func addLoginPassword(c bot.Context, u service.User) error {
+	data := strings.Fields(c.Text())
+	if len(data) != 2 {
+		return c.SendMessage(txtIncorrectLoginPassInput)
+	}
+
+	if err := c.DelData("grades_input"); err != nil { // сначала важно удалить старые данные из кэша
+		return err
+	}
+	err := u.UpdateLoginPassword(c.Context(), service.UserLoginPasswordInput{
+		UserId:   c.UserId(),
+		Login:    data[0],
+		Password: data[1],
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrUserIncorrectLogin) {
+			return c.SendMessage(txtIncorrectLoginPassInput)
+		}
+		return err
+	}
+	return c.DeleteLastMessage()
 }

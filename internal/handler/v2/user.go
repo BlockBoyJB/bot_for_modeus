@@ -25,6 +25,7 @@ func newUserRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 	b.State(stateInputFullName, r.stateInputFullName)
 	b.State(stateChooseStudent, r.stateChooseStudent)
 	b.State(stateActionAfterCreate, r.stateActionAfterCreate)
+	b.State(stateAddLoginPasswordAfterCreate, r.stateAddLoginPasswordAfterCreate)
 	b.Command("/stop", r.cmdStop)
 	b.State(stateConfirmDelete, r.stateConfirmDelete)
 
@@ -104,16 +105,23 @@ func (r *userRouter) stateChooseStudent(c bot.Context) error {
 }
 
 func (r *userRouter) stateActionAfterCreate(c bot.Context) error {
+	if err := c.DelData("students", "state"); err != nil {
+		return err
+	}
 	if c.Text() == "да" {
 		if err := c.EditMessage(txtAddLoginPassword); err != nil {
 			return err
 		}
-		return c.SetState(stateAddLoginPassword)
+		return c.SetState(stateAddLoginPasswordAfterCreate)
 	}
-	if err := c.DelData("students"); err != nil {
+	return c.EditMessageWithInlineKB("Пользователь успешно создан!\n\n"+txtUserAfterCreate, tgmodel.GuideButtons)
+}
+
+func (r *userRouter) stateAddLoginPasswordAfterCreate(c bot.Context) error {
+	if err := addLoginPassword(c, r.user); err != nil {
 		return err
 	}
-	return c.EditMessage("Пользователь успешно создан!\n\n<b>Нажмите на любую из кнопок на клавиатуре или меню</b>, чтобы воспользоваться ботом!")
+	return c.SendMessageWithInlineKB("Логин и пароль успешно сохранены!\n\n"+txtUserAfterCreate, tgmodel.GuideButtons)
 }
 
 func (r *userRouter) cmdStop(c bot.Context) error {
