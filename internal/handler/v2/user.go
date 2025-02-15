@@ -21,6 +21,7 @@ func newUserRouter(b *bot.Bot, user service.User, parser parser.Parser) {
 	}
 
 	b.Command("/start", r.cmdStart)
+	b.Command("/kb", r.cmdKB)
 	b.Callback("/cmd_start_back", r.callbackStartBack)
 	b.State(stateInputFullName, r.stateInputFullName)
 	b.State(stateChooseStudent, r.stateChooseStudent)
@@ -42,6 +43,10 @@ func (r *userRouter) cmdStart(c bot.Context) error {
 		return err
 	}
 	return c.SendMessageWithReplyKB(txtStart, tgmodel.RowCommands)
+}
+
+func (r *userRouter) cmdKB(c bot.Context) error {
+	return c.SendMessageWithReplyKB("👋", tgmodel.RowCommands)
 }
 
 func (r *userRouter) callbackStartBack(c bot.Context) error {

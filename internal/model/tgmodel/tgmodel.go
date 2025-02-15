@@ -166,6 +166,7 @@ var UICommands = []tgbotapi.BotCommand{
 	{Command: "me", Description: "Информация обо мне"},
 	{Command: "settings", Description: "Настройки"},
 	{Command: "other_student", Description: "Расписание другого студента"},
+	{Command: "kb", Description: "Показать клавиатуру"},
 	{Command: "stop", Description: "Остановить бота"},
 }
 
