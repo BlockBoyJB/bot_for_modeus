@@ -29,19 +29,33 @@ func newRouter() router {
 	}
 }
 
+// Router defines all router handle interfaces, including bot and group router.
 type Router interface {
 	Add(m method, p string, h HandlerFunc, middleware ...MiddlewareFunc)
 	Command(name string, h HandlerFunc, m ...MiddlewareFunc)
 	Message(name string, h HandlerFunc, m ...MiddlewareFunc)
 	Callback(name string, h HandlerFunc, m ...MiddlewareFunc)
 	State(name string, h HandlerFunc, m ...MiddlewareFunc)
+
+	// AddTree регистрирует обработчик в дерево с возможностью задавать сегменты пути в виде параметрических переменных
 	AddTree(m method, path string, h HandlerFunc, middleware ...MiddlewareFunc)
+
+	// Use добавляет новый мидлварь в конец стека
 	Use(middleware ...MiddlewareFunc)
+
+	// PreUse добавляет мидлварь в стек предобработчиков.
+	// Это означает, что мидлварь из этого стека будут вызваны сразу после основного хэндлера, но до основного стека мидлварей.
+	// Удобно, если нужна миддлварь, которая будет вызываться перед всеми остальными вне зависимости от их порядка добавления
+	PreUse(middleware ...MiddlewareFunc)
+
+	// Group создает новую группу обработчиков, в которой удобно работать со своим пространством мидлварей.
+	// Все мидлвари, добавленные в группу распространяются только на хэндлеры группы.
 	Group(m ...MiddlewareFunc) Router
 }
 
 func (b *Bot) Add(m method, p string, h HandlerFunc, middleware ...MiddlewareFunc) {
-	b.routers[m].static[p] = applyMiddleware(h, append(b.middleware, middleware...)...)
+	stack := append(b.middleware, middleware...)
+	b.routers[m].static[p] = applyMiddleware(h, append(stack, b.premiddleware...)...)
 }
 
 func (b *Bot) Command(name string, h HandlerFunc, m ...MiddlewareFunc) {
@@ -61,16 +75,22 @@ func (b *Bot) State(name string, h HandlerFunc, m ...MiddlewareFunc) {
 }
 
 func (b *Bot) AddTree(m method, path string, h HandlerFunc, middleware ...MiddlewareFunc) {
-	b.routers[m].addTree(path, applyMiddleware(h, append(b.middleware, middleware...)...))
+	stack := append(b.middleware, middleware...)
+	b.routers[m].addTree(path, applyMiddleware(h, append(stack, b.premiddleware...)...))
 }
 
 func (b *Bot) Use(middleware ...MiddlewareFunc) {
 	b.middleware = append(b.middleware, middleware...)
 }
 
+func (b *Bot) PreUse(middleware ...MiddlewareFunc) {
+	b.premiddleware = append(b.premiddleware, middleware...)
+}
+
 type group struct {
-	parent     Router
-	middleware []MiddlewareFunc
+	parent        Router
+	middleware    []MiddlewareFunc
+	premiddleware []MiddlewareFunc
 }
 
 func (b *Bot) Group(m ...MiddlewareFunc) Router {
@@ -81,7 +101,8 @@ func (b *Bot) Group(m ...MiddlewareFunc) Router {
 }
 
 func (g *group) Add(m method, name string, h HandlerFunc, middleware ...MiddlewareFunc) {
-	g.parent.Add(m, name, h, append(g.middleware, middleware...)...)
+	stack := append(g.middleware, middleware...)
+	g.parent.Add(m, name, h, append(stack, g.premiddleware...)...)
 }
 
 func (g *group) Command(name string, h HandlerFunc, m ...MiddlewareFunc) {
@@ -101,11 +122,16 @@ func (g *group) State(name string, h HandlerFunc, m ...MiddlewareFunc) {
 }
 
 func (g *group) AddTree(m method, path string, h HandlerFunc, middleware ...MiddlewareFunc) {
-	g.parent.AddTree(m, path, h, append(g.middleware, middleware...)...)
+	stack := append(g.middleware, middleware...)
+	g.parent.AddTree(m, path, h, append(stack, g.premiddleware...)...)
 }
 
 func (g *group) Use(middleware ...MiddlewareFunc) {
 	g.middleware = append(g.middleware, middleware...)
+}
+
+func (g *group) PreUse(m ...MiddlewareFunc) {
+	g.premiddleware = append(g.premiddleware, m...)
 }
 
 func (g *group) Group(m ...MiddlewareFunc) Router {
@@ -238,6 +264,9 @@ func (r *route) find(c Context, path string) (HandlerFunc, bool) {
 	return r.findTree(c, path)
 }
 
+// applyMiddleware функция, которая "навешивает" на хэндлер мидлвари.
+// Важно понимать, что добавляет она их по принципу стека,
+// т.е самый первый из слайса будет добавлен последним (станет внешним), а последний - первым (внутренним)
 func applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) HandlerFunc {
 	for i := len(middleware) - 1; i >= 0; i-- {
 		h = middleware[i](h)

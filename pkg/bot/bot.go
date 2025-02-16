@@ -20,17 +20,18 @@ type Logger interface {
 }
 
 type Bot struct {
-	client     *tgbotapi.BotAPI
-	wg         *sync.WaitGroup
-	ctx        context.Context
-	parseMode  string
-	routers    router
-	middleware []MiddlewareFunc
-	storage    storage
-	logger     Logger
-	stop       chan bool
-	once       *singleflight.Flight
-	isWebhook  bool
+	client        *tgbotapi.BotAPI
+	wg            *sync.WaitGroup
+	ctx           context.Context
+	parseMode     string
+	routers       router
+	middleware    []MiddlewareFunc
+	premiddleware []MiddlewareFunc
+	storage       storage
+	logger        Logger
+	stop          chan bool
+	once          *singleflight.Flight
+	isWebhook     bool
 }
 
 type Settings struct {
