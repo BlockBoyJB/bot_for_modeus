@@ -29,28 +29,90 @@ func newRouter() router {
 	}
 }
 
-func (b *Bot) Command(name string, h HandlerFunc) {
-	b.Add(OnCommand, name, h)
+type Router interface {
+	Add(m method, p string, h HandlerFunc, middleware ...MiddlewareFunc)
+	Command(name string, h HandlerFunc, m ...MiddlewareFunc)
+	Message(name string, h HandlerFunc, m ...MiddlewareFunc)
+	Callback(name string, h HandlerFunc, m ...MiddlewareFunc)
+	State(name string, h HandlerFunc, m ...MiddlewareFunc)
+	AddTree(m method, path string, h HandlerFunc, middleware ...MiddlewareFunc)
+	Use(middleware ...MiddlewareFunc)
+	Group(m ...MiddlewareFunc) Router
 }
 
-func (b *Bot) Message(name string, h HandlerFunc) {
-	b.Add(OnMessage, name, h)
+func (b *Bot) Add(m method, p string, h HandlerFunc, middleware ...MiddlewareFunc) {
+	b.routers[m].static[p] = applyMiddleware(h, append(b.middleware, middleware...)...)
 }
 
-func (b *Bot) Callback(name string, h HandlerFunc) {
-	b.Add(OnCallback, name, h)
+func (b *Bot) Command(name string, h HandlerFunc, m ...MiddlewareFunc) {
+	b.Add(OnCommand, name, h, m...)
 }
 
-func (b *Bot) State(name string, h HandlerFunc) {
-	b.Add(OnState, name, h)
+func (b *Bot) Message(name string, h HandlerFunc, m ...MiddlewareFunc) {
+	b.Add(OnMessage, name, h, m...)
 }
 
-func (b *Bot) Add(m method, name string, h HandlerFunc) {
-	b.routers[m].static[name] = h
+func (b *Bot) Callback(name string, h HandlerFunc, m ...MiddlewareFunc) {
+	b.Add(OnCallback, name, h, m...)
 }
 
-func (b *Bot) AddTree(m method, path string, h HandlerFunc) {
-	b.routers[m].addTree(path, h)
+func (b *Bot) State(name string, h HandlerFunc, m ...MiddlewareFunc) {
+	b.Add(OnState, name, h, m...)
+}
+
+func (b *Bot) AddTree(m method, path string, h HandlerFunc, middleware ...MiddlewareFunc) {
+	b.routers[m].addTree(path, applyMiddleware(h, append(b.middleware, middleware...)...))
+}
+
+func (b *Bot) Use(middleware ...MiddlewareFunc) {
+	b.middleware = append(b.middleware, middleware...)
+}
+
+type group struct {
+	parent     Router
+	middleware []MiddlewareFunc
+}
+
+func (b *Bot) Group(m ...MiddlewareFunc) Router {
+	return &group{
+		parent:     b,
+		middleware: m,
+	}
+}
+
+func (g *group) Add(m method, name string, h HandlerFunc, middleware ...MiddlewareFunc) {
+	g.parent.Add(m, name, h, append(g.middleware, middleware...)...)
+}
+
+func (g *group) Command(name string, h HandlerFunc, m ...MiddlewareFunc) {
+	g.Add(OnCommand, name, h, m...)
+}
+
+func (g *group) Message(name string, h HandlerFunc, m ...MiddlewareFunc) {
+	g.Add(OnMessage, name, h, m...)
+}
+
+func (g *group) Callback(name string, h HandlerFunc, m ...MiddlewareFunc) {
+	g.Add(OnCallback, name, h, m...)
+}
+
+func (g *group) State(name string, h HandlerFunc, m ...MiddlewareFunc) {
+	g.Add(OnState, name, h, m...)
+}
+
+func (g *group) AddTree(m method, path string, h HandlerFunc, middleware ...MiddlewareFunc) {
+	g.parent.AddTree(m, path, h, append(g.middleware, middleware...)...)
+}
+
+func (g *group) Use(middleware ...MiddlewareFunc) {
+	g.middleware = append(g.middleware, middleware...)
+}
+
+func (g *group) Group(m ...MiddlewareFunc) Router {
+	return &group{
+		parent:     g,
+		middleware: m,
+	}
 }
 
 // Структура одного направления поддерживает как статические ручки (для O(1)), так и в виде дерева с возможностью более гибкой маршрутизации
@@ -174,10 +236,6 @@ func (r *route) find(c Context, path string) (HandlerFunc, bool) {
 		return f, ok
 	}
 	return r.findTree(c, path)
-}
-
-func (b *Bot) Use(middleware ...MiddlewareFunc) {
-	b.middleware = append(b.middleware, middleware...)
 }
 
 func applyMiddleware(h HandlerFunc, middleware ...MiddlewareFunc) HandlerFunc {

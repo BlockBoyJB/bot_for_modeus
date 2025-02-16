@@ -105,9 +105,7 @@ func (b *Bot) processMessage(u tgbotapi.Update) {
 	if !ok {
 		return
 	}
-	if b.middleware != nil {
-		f = applyMiddleware(f, b.middleware...)
-	}
+
 	if err := f(c); err != nil {
 		b.logger.Printf("/processMessage handle message func err: %s", err)
 	}
