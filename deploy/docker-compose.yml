@@ -52,6 +52,28 @@ services:
     networks:
       - bot
 
+  prometheus:
+    container_name: bot-prometheus
+    image: prom/prometheus:latest
+    restart: always
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus_data:/prometheus
+    networks:
+      - bot
+
+  grafana:
+    container_name: bot-grafana
+    image: grafana/grafana-oss:main
+    restart: always
+    volumes:
+      - ./grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_LOGIN}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+    networks:
+      - bot
+
   nginx:
     container_name: bot-nginx
     image: nginx:alpine
@@ -61,9 +83,11 @@ services:
         condition: service_started
     ports:
       - "443:443"
+      - "3000:3000"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
       - ./geo.conf:/etc/nginx/geo.conf
+      - ./metrics.conf:/etc/nginx/metrics.conf
       - ./logs/nginx:/var/log/nginx
       - ${NGINX_CERT}:/etc/nginx/certs/cert.pem
       - ${NGINX_KEY}:/etc/nginx/certs/privkey.pem
