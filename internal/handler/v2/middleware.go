@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"bot_for_modeus/internal/metrics"
 	"bot_for_modeus/internal/model/tgmodel"
 	"bot_for_modeus/internal/parser"
 	"bot_for_modeus/internal/service"
@@ -61,5 +62,22 @@ func recoverMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
 			}
 		}()
 		return next(c)
+	}
+}
+
+func metricsMiddleware(t string) bot.MiddlewareFunc {
+	return func(next bot.HandlerFunc) bot.HandlerFunc {
+		return func(c bot.Context) error {
+			start := time.Now()
+			defer func() {
+				metrics.RequestDuration(t, time.Since(start))
+				metrics.RequestTotal(t)
+			}()
+			if err := next(c); err != nil {
+				metrics.ErrorsTotal(t)
+				return err
+			}
+			return nil
+		}
 	}
 }

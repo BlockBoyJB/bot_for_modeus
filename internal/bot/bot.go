@@ -3,6 +3,7 @@ package bot
 import (
 	"bot_for_modeus/config"
 	v2 "bot_for_modeus/internal/handler/v2"
+	"bot_for_modeus/internal/metrics"
 	"bot_for_modeus/internal/model/tgmodel"
 	"bot_for_modeus/internal/repo"
 	"bot_for_modeus/internal/service"
@@ -13,6 +14,7 @@ import (
 	"context"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -56,6 +58,12 @@ func Run() {
 	}
 	v2.NewHandler(b, services)
 	go b.ListenAndServe()
+
+	go func() {
+		if err = metrics.Listen(net.JoinHostPort("", "8082")); err != nil {
+			log.Fatal().Err(err).Msg("metrics error")
+		}
+	}()
 
 	log.Info().Msg("all services are running!")
 

@@ -12,10 +12,12 @@ type studentRouter struct {
 	parser parser.Parser
 }
 
-func newStudentRouter(b *bot.Bot, parser parser.Parser) {
+func newStudentRouter(b bot.Router, parser parser.Parser) {
 	r := &studentRouter{
 		parser: parser,
 	}
+
+	b = b.Group(metricsMiddleware("other_student"), errorMiddleware)
 
 	b.Command("/other_student", r.cmdOtherStudent)
 	b.Message(tgmodel.OtherStudentButton, r.cmdOtherStudent)

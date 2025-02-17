@@ -16,26 +16,31 @@ type scheduleRouter struct {
 	parser parser.Parser
 }
 
-func newScheduleRouter(b *bot.Bot, user service.User, parser parser.Parser) {
+func newScheduleRouter(b bot.Router, user service.User, parser parser.Parser) {
 	r := &scheduleRouter{
 		user:   user,
 		parser: parser,
 	}
 
-	b.Command("/day_schedule", r.cmdDaySchedule)
-	b.Message(tgmodel.DayScheduleButton, r.cmdDaySchedule)
-	b.Command("/week_schedule", r.cmdWeekSchedule)
-	b.Message(tgmodel.WeekScheduleButton, r.cmdWeekSchedule)
-	b.AddTree(bot.OnCallback, "/user/:type/:date/:schedule_id", r.callbackUserSchedule)
+	{
+		g := b.Group(metricsMiddleware("schedule"))
 
-	b.Command("/grades", r.cmdGrades)
-	b.Message(tgmodel.GradesButton, r.cmdGrades)
+		g.Command("/day_schedule", r.cmdDaySchedule)
+		g.Message(tgmodel.DayScheduleButton, r.cmdDaySchedule)
+		g.Command("/week_schedule", r.cmdWeekSchedule)
+		g.Message(tgmodel.WeekScheduleButton, r.cmdWeekSchedule)
+		g.AddTree(bot.OnCallback, "/user/:type/:date/:schedule_id", r.callbackUserSchedule)
+	}
+	{
+		g := b.Group(metricsMiddleware("grades"))
 
-	b.AddTree(bot.OnCallback, "/grades/semester/change/:semester_id", r.callbackChangeSemester)
-	b.AddTree(bot.OnCallback, "/grades/semester/:semester_id/subjects", r.callbackChooseSemesterSubject)
-
-	b.AddTree(bot.OnCallback, "/grades/semester/:semester_id", r.callbackSemesterGrades)
-	b.AddTree(bot.OnCallback, "/grades/subjects/:subject_id/:index", r.callbackSubjectDetailedInfo)
+		g.Command("/grades", r.cmdGrades)
+		g.Message(tgmodel.GradesButton, r.cmdGrades)
+		g.AddTree(bot.OnCallback, "/grades/semester/change/:semester_id", r.callbackChangeSemester)
+		g.AddTree(bot.OnCallback, "/grades/semester/:semester_id/subjects", r.callbackChooseSemesterSubject)
+		g.AddTree(bot.OnCallback, "/grades/semester/:semester_id", r.callbackSemesterGrades)
+		g.AddTree(bot.OnCallback, "/grades/subjects/:subject_id/:index", r.callbackSubjectDetailedInfo)
+	}
 }
 
 func (r *scheduleRouter) cmdDaySchedule(c bot.Context) error {

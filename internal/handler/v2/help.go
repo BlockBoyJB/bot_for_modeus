@@ -14,10 +14,12 @@ type helpRouter struct {
 	parser parser.Parser
 }
 
-func newHelpRouter(b *bot.Bot, parser parser.Parser) {
+func newHelpRouter(b bot.Router, parser parser.Parser) {
 	r := &helpRouter{
 		parser: parser,
 	}
+
+	b = b.Group(metricsMiddleware("help"))
 
 	b.Command("/help", r.cmdHelp)
 	b.Message(tgmodel.HelpButton, r.cmdHelp)

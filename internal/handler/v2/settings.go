@@ -16,11 +16,13 @@ type settingsRouter struct {
 	parser parser.Parser
 }
 
-func newSettingsRouter(b *bot.Bot, user service.User, parser parser.Parser) {
+func newSettingsRouter(b bot.Router, user service.User, parser parser.Parser) {
 	r := &settingsRouter{
 		user:   user,
 		parser: parser,
 	}
+
+	b = b.Group(metricsMiddleware("settings"))
 
 	b.Command("/settings", r.cmdSettings)
 	b.Message(tgmodel.SettingsButton, r.cmdSettings)

@@ -14,17 +14,18 @@ type friendsRouter struct {
 	parser parser.Parser
 }
 
-func newFriendsRouter(b *bot.Bot, user service.User, parser parser.Parser) {
+func newFriendsRouter(b bot.Router, user service.User, parser parser.Parser) {
 	r := &friendsRouter{
 		user:   user,
 		parser: parser,
 	}
 
+	b = b.Group(metricsMiddleware("friends"))
+
 	b.Command("/friends", r.cmdFriends)
 	b.Message(tgmodel.FriendsButton, r.cmdFriends)
 	b.Callback("/choose_friend_back", r.callbackChooseFriendBack)
 	b.AddTree(bot.OnCallback, "/friends/choose/:schedule_id", r.callbackChooseFriend)
-	b.AddTree(bot.OnCallback, "/friends/action/:schedule_id", r.callbackChooseFriendActionBack)
 	b.AddTree(bot.OnCallback, "/friends/delete/:schedule_id", r.callbackDeleteFriend)
 	b.AddTree(bot.OnCallback, "/friends/:type/:date/:schedule_id", r.callbackFriendsSchedule)
 
@@ -105,7 +106,7 @@ func (r *friendsRouter) callbackDeleteFriend(c bot.Context) error {
 }
 
 func (r *friendsRouter) callbackFriendsSchedule(c bot.Context) error {
-	return studentSchedule(c, r.parser, "friends", tgmodel.BackButton("/friends/action/"+c.Param("schedule_id")))
+	return studentSchedule(c, r.parser, "friends", tgmodel.BackButton("/friends/choose/"+c.Param("schedule_id")))
 }
 
 func (r *friendsRouter) callbackAddFriend(c bot.Context) error {

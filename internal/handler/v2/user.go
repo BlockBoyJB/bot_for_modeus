@@ -14,11 +14,13 @@ type userRouter struct {
 	parser parser.Parser
 }
 
-func newUserRouter(b *bot.Bot, user service.User, parser parser.Parser) {
+func newUserRouter(b bot.Router, user service.User, parser parser.Parser) {
 	r := &userRouter{
 		user:   user,
 		parser: parser,
 	}
+
+	b = b.Group(metricsMiddleware("user"))
 
 	b.Command("/start", r.cmdStart)
 	b.Command("/kb", r.cmdKB)
