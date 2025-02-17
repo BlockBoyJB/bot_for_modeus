@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/bytedance/sonic"
 	"github.com/rs/zerolog/log"
@@ -33,6 +34,11 @@ type Parser interface {
 	DeleteToken(login string) error
 }
 
+const (
+	defaultRetryCount = 3
+	defaultRetryDelay = time.Second
+)
+
 type parser struct {
 	host   string
 	client *http.Client
@@ -40,8 +46,13 @@ type parser struct {
 
 func NewParserService(host string) Parser {
 	return &parser{
-		host:   host,
-		client: &http.Client{},
+		host: host,
+		client: &http.Client{
+			Transport: &retry{
+				retries: defaultRetryCount,
+				delay:   defaultRetryDelay,
+			},
+		},
 	}
 }
 
@@ -61,6 +72,9 @@ func (p *parser) makeRequest(method, uri string, v any) (*http.Response, error) 
 
 	resp, err := p.client.Do(r)
 	if err != nil {
+		if errors.Is(err, errRetriesExceeded) {
+			return nil, ErrParserUnavailable
+		}
 		log.Err(err).Str("method", method).Str("uri", uri).Msg("parser/makeRequest error make http request")
 		return nil, err
 	}
@@ -102,4 +116,28 @@ func parseBody(r *http.Response, v any) error {
 
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
+}
+
+var errRetriesExceeded = errors.New("max retries exceeded")
+
+type retry struct {
+	retries int
+	delay   time.Duration
+}
+
+func (rt *retry) RoundTrip(r *http.Request) (resp *http.Response, err error) {
+	for i := 0; i < rt.retries; i++ {
+		resp, err = http.DefaultTransport.RoundTrip(r)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusInternalServerError {
+			return
+		}
+		_ = resp.Body.Close()
+
+		time.Sleep(rt.delay)
+	}
+	return nil, errRetriesExceeded
 }
