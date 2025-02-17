@@ -150,12 +150,16 @@ func (s *redisStorageTestSuite) Test_setData() {
 		b, err := s.redis.Get(s.ctx, s.storage.dataKey(defaultId, defaultKey)).Bytes()
 		s.Assert().Nil(err)
 
+		var actual, expect any
+
 		expectData, err := sonic.Marshal(tc.data)
 		s.Assert().Nil(err)
+		s.Assert().Nil(sonic.Unmarshal(expectData, &expect))
 
-		// разницы нет в каком варианте их сравнивать: слайс байтов или через тип данных + значение
-		// UPD: после замены std на bytedance/sonic разница есть только для map, причем порядок ключей имеет значение =)
-		s.Assert().Equal(expectData, b)
+		s.Assert().Nil(sonic.Unmarshal(b, &actual))
+		s.Assert().NotNil(actual)
+
+		s.Assert().Equal(expect, actual)
 	}
 }
 
@@ -262,10 +266,17 @@ func (s *redisStorageTestSuite) Test_setCommonData() {
 		b, err := s.redis.Get(s.ctx, s.storage.normalizeKey(tc.key)).Bytes()
 		s.Assert().Nil(err)
 
+		var actual, expect any
+
 		expectData, err := sonic.Marshal(tc.data)
 		s.Assert().Nil(err)
+		s.Assert().Nil(sonic.Unmarshal(expectData, &expect))
 
-		s.Assert().Equal(expectData, b)
+		s.Assert().Nil(sonic.Unmarshal(b, &actual))
+		s.Assert().NotNil(actual)
+
+		s.Assert().Equal(expect, actual)
+
 		if tc.ttl > 0 {
 			actualTTL, err := s.redis.TTL(s.ctx, s.storage.normalizeKey(tc.key)).Result()
 			s.Assert().Nil(err)
