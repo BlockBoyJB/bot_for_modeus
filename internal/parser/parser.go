@@ -4,15 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/bytedance/sonic"
-	log "github.com/sirupsen/logrus"
+	"github.com/rs/zerolog/log"
 	"io"
 	"net/http"
 	"time"
 	"unsafe"
-)
-
-const (
-	parserServicePrefixLog = "/parser"
 )
 
 type Parser interface {
@@ -52,20 +48,20 @@ func NewParserService(host string) Parser {
 func (p *parser) makeRequest(method, uri string, v any) (*http.Response, error) {
 	body, err := sonic.Marshal(v)
 	if err != nil {
-		log.Errorf("%s/makeRequest parse body input error: %s", parserServicePrefixLog, err)
+		log.Err(err).Msg("parser/makeRequest error marshal input body") // тут тело запроса логировать небезопасно
 		return nil, err
 	}
 
 	r, err := http.NewRequest(method, p.host+uri, bytes.NewBuffer(body))
 	if err != nil {
-		log.Errorf("%s/makeRequest init request error: %s", parserServicePrefixLog, err)
+		log.Err(err).Str("method", method).Str("uri", uri).Msg("parser/makeRequest error init request")
 		return nil, err
 	}
 	r.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(r)
 	if err != nil {
-		log.Errorf("%s/makeRequest request error: %s", parserServicePrefixLog, err)
+		log.Err(err).Str("method", method).Str("uri", uri).Msg("parser/makeRequest error make http request")
 		return nil, err
 	}
 	if resp.StatusCode > 400 {
@@ -93,12 +89,12 @@ func handleParserErr(r *http.Response) error {
 func parseBody(r *http.Response, v any) error {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Errorf("%s/parseBody error read response body: %s", parserServicePrefixLog, err)
+		log.Err(err).Msg("parser/parseBody error read response body")
 		return err
 	}
 	_ = r.Body.Close()
 	if err = sonic.UnmarshalString(b2s(body), v); err != nil {
-		log.Errorf("%s/parseBody error unmarhal body to struct: %s", parserServicePrefixLog, err)
+		log.Err(err).Msg("parser/parseBody error unmarshal body to struct")
 		return err
 	}
 	return nil

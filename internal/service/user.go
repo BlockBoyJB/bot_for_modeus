@@ -7,13 +7,9 @@ import (
 	"bot_for_modeus/pkg/crypter"
 	"context"
 	"errors"
-	log "github.com/sirupsen/logrus"
+	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"regexp"
-)
-
-const (
-	userServicePrefixLog = "/service/user"
 )
 
 // Регулярка для первичной проверки корректности почты.
@@ -41,7 +37,7 @@ func (s *userService) Create(ctx context.Context, input UserInput) error {
 
 	if err != nil {
 		if !errors.Is(err, mongoerrs.ErrNotFound) {
-			log.Errorf("%s/Create error find user: %s", userServicePrefixLog, err)
+			log.Err(err).Int64("user_id", input.UserId).Msg("user/Create error find user by id")
 			return err
 		}
 	}
@@ -54,7 +50,7 @@ func (s *userService) Create(ctx context.Context, input UserInput) error {
 		Friends:    []dbmodel.Friend{},
 	})
 	if err != nil {
-		log.Errorf("%s/Create error create user: %s", userServicePrefixLog, err)
+		log.Err(err).Interface("input", input).Msg("user/Create error create user in database")
 		return err
 	}
 	return nil
@@ -66,7 +62,7 @@ func (s *userService) Find(ctx context.Context, userId int64) (UserOutput, error
 		if errors.Is(err, mongoerrs.ErrNotFound) {
 			return UserOutput{}, ErrUserNotFound
 		}
-		log.Errorf("%s/Find error find user: %s", userServicePrefixLog, err)
+		log.Err(err).Int64("user_id", userId).Msg("user/Find error find user by id")
 		return UserOutput{}, err
 	}
 	o := UserOutput{
@@ -92,7 +88,7 @@ func (s *userService) UpdateLoginPassword(ctx context.Context, input UserLoginPa
 	}
 	password, err := s.crypter.Encrypt(input.Password)
 	if err != nil {
-		log.Errorf("%s/UpdateLoginPassword error encrypt password: %s", userServicePrefixLog, err)
+		log.Err(err).Int64("user_id", input.UserId).Msg("user/UpdateLoginPassword error encrypt password")
 		return err
 	}
 	update := bson.D{{"$set", bson.D{{"login", input.Login}, {"password", password}}}}
@@ -100,7 +96,7 @@ func (s *userService) UpdateLoginPassword(ctx context.Context, input UserLoginPa
 		if errors.Is(err, mongoerrs.ErrNotFound) {
 			return ErrUserNotFound
 		}
-		log.Errorf("%s/UpdateLoginPassword error update user login and password: %s", userServicePrefixLog, err)
+		log.Err(err).Int64("user_id", input.UserId).Msg("user/UpdateLoginPassword error update login and password in database")
 		return err
 	}
 	return nil
@@ -116,7 +112,7 @@ func (s *userService) UpdateInfo(ctx context.Context, input UserInput) error {
 		if errors.Is(err, mongoerrs.ErrNotFound) {
 			return ErrUserNotFound
 		}
-		log.Errorf("%s/UpdateInfo error update user info: %s", userServicePrefixLog, err)
+		log.Err(err).Interface("input", input).Msg("user/UpdateInfo error update user in database")
 		return err
 	}
 	return nil
@@ -127,7 +123,7 @@ func (s *userService) Delete(ctx context.Context, userId int64) error {
 		if errors.Is(err, mongoerrs.ErrNotFound) {
 			return ErrUserNotFound
 		}
-		log.Errorf("%s/Delete error delete user: %s", userServicePrefixLog, err)
+		log.Err(err).Int64("user_id", userId).Msg("user/Delete error delete user in database")
 		return err
 	}
 	return nil
@@ -142,7 +138,8 @@ func (s *userService) AddFriend(ctx context.Context, input FriendInput) error {
 		if errors.Is(err, mongoerrs.ErrNotFound) {
 			return ErrUserNotFound
 		}
-		log.Errorf("%s/AddFriend error add user friend: %s", userServicePrefixLog, err)
+		log.Err(err).Int64("user_id", input.UserId).Str("schedule_id", input.ScheduleId).Str("full_name", input.FullName).
+			Msg("user/AddFriend error add friend to user in database")
 		return err
 	}
 	return nil
@@ -156,7 +153,8 @@ func (s *userService) DeleteFriend(ctx context.Context, input FriendInput) error
 		if errors.Is(err, mongoerrs.ErrNotFound) {
 			return ErrUserNotFound
 		}
-		log.Errorf("%s/DeleteFriend error delete user friend: %s", userServicePrefixLog, err)
+		log.Err(err).Int64("user_id", input.UserId).Str("schedule_id", input.ScheduleId).
+			Msg("user/DeleteFriend error delete user friend in database")
 		return err
 	}
 	return nil
@@ -165,7 +163,7 @@ func (s *userService) DeleteFriend(ctx context.Context, input FriendInput) error
 func (s *userService) Decrypt(input string) (string, error) {
 	d, err := s.crypter.Decrypt(input)
 	if err != nil {
-		log.Errorf("%s/Decrypt error decrypt user data: %s", userServicePrefixLog, err)
+		log.Err(err).Msg("user/Decrypt error decrypt data")
 		return "", err
 	}
 	return d, nil

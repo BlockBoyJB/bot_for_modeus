@@ -7,17 +7,25 @@ import (
 	"bot_for_modeus/pkg/bot"
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"os"
+	"time"
 )
 
-func loggingMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
-	return func(c bot.Context) error {
-		u := c.Update()
-		if err := next(c); err != nil {
-			log.Errorf("Message from %d is handled with error: %s", u.SentFrom().ID, err)
-			return c.SendMessage(txtError)
+func loggingMiddleware() bot.MiddlewareFunc {
+	logger := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
+
+	return func(next bot.HandlerFunc) bot.HandlerFunc {
+		return func(c bot.Context) error {
+			start := time.Now()
+			err := next(c)
+			logger.Err(err).Int64("user_id", c.UserId()).Float64("duration", time.Since(start).Seconds()).Msg("update from user")
+			if err != nil {
+				return c.SendMessage(txtError)
+			}
+			return nil
 		}
-		return nil
 	}
 }
 
@@ -49,7 +57,7 @@ func recoverMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
 	return func(c bot.Context) error {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Warnf("[PANIC RECOVER] %s", r)
+				log.Error().Interface("recover", r).Msg("[PANIC RECOVER]")
 			}
 		}()
 		return next(c)

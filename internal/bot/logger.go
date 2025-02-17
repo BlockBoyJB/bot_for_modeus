@@ -1,29 +1,27 @@
 package bot
 
 import (
-	"github.com/sirupsen/logrus"
-	"log"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"io"
 	"os"
 )
 
-func setLogger(level, output string) *logrus.Logger {
-	logLevel, err := logrus.ParseLevel(level)
+func setLogger(level, output string) *zerolog.Logger {
+	logLevel, err := zerolog.ParseLevel(level)
 	if err != nil {
-		logrus.SetLevel(logrus.DebugLevel)
-	} else {
-		logrus.SetLevel(logLevel)
+		logLevel = zerolog.DebugLevel
 	}
-	logrus.SetFormatter(&logrus.JSONFormatter{
-		TimestampFormat: "2006/01/02 15:04:05",
-	})
+	var out io.Writer
 	if output == "stdout" {
-		logrus.SetOutput(os.Stdout)
+		out = os.Stdout
 	} else {
 		file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal().Err(err).Msg("setup logger error")
 		}
-		logrus.SetOutput(file)
+		out = file
 	}
-	return logrus.StandardLogger()
+	log.Logger = zerolog.New(out).Level(logLevel).With().Timestamp().Logger()
+	return &log.Logger
 }

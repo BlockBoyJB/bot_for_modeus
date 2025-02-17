@@ -12,7 +12,7 @@ import (
 	"bot_for_modeus/pkg/redis"
 	"context"
 	"github.com/joho/godotenv"
-	log "github.com/sirupsen/logrus"
+	"github.com/rs/zerolog/log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -22,14 +22,14 @@ func Run() {
 	ctx := context.Background()
 	cfg, err := config.NewConfig()
 	if err != nil {
-		log.Fatalf("config init error: %s", err)
+		log.Fatal().Err(err).Msg("config init error")
 	}
 	logger := setLogger(cfg.Log.Level, cfg.Log.Output)
 
 	// Initializing database
 	mongodb, err := mongo.NewMongo(ctx, cfg.MongoDB.Url, cfg.MongoDB.DB)
 	if err != nil {
-		log.Fatalf("database init error: %s", err)
+		log.Fatal().Err(err).Msg("database init error")
 	}
 	defer mongodb.Disconnect()
 
@@ -52,26 +52,26 @@ func Run() {
 	// tg client
 	b, err := bot.NewBot(s, bot.SetCommands(tgmodel.UICommands), bot.RedisStorage(ctx, rdb.Conn()), bot.SetLogger(logger))
 	if err != nil {
-		log.Fatalf("tg client init error: %s", err)
+		log.Fatal().Err(err).Msg("tg client init error")
 	}
 	v2.NewHandler(b, services)
 	go b.ListenAndServe()
 
-	log.Info("all services are running!")
+	log.Info().Msg("all services are running!")
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
 	<-interrupt
 
 	b.Shutdown()
-	log.Infof("Bot shutdown with exit code 0")
+	log.Info().Msg("bot shutdown with exit code 0")
 }
 
 // loading environment params from .env
 func init() {
 	if _, ok := os.LookupEnv("BOT_TOKEN"); !ok {
 		if err := godotenv.Load(); err != nil {
-			log.Fatalf("load env file error: %s", err)
+			log.Fatal().Err(err).Msg("load env file error")
 		}
 	}
 }
