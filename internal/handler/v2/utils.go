@@ -249,10 +249,6 @@ func lookupGI(c bot.Context, u service.User, decrypt bool) (gi parser.GradesInpu
 
 	user, err := u.Find(c.Context(), c.UserId())
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			_ = c.SendMessage(txtUserNotFound)
-			return parser.GradesInput{}, err
-		}
 		return parser.GradesInput{}, err
 	}
 
