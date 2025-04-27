@@ -4,15 +4,8 @@ services:
   bot:
     container_name: bot
     build: .
-    volumes:
-      - ./logs:/logs
     env_file:
       - docker.env
-    depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_started
     networks:
       - bot
 
@@ -21,11 +14,6 @@ services:
     image: mongo:5.0-rc-focal
     ports:
       - "27017:27017"
-    healthcheck:
-      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     env_file:
       - docker.env
     networks:
@@ -34,20 +22,16 @@ services:
   parser:
     container_name: bot-parser
     image: ${PARSER_IMAGE}
-    volumes:
-      - ./logs/parser:/logs
     env_file:
       - docker.env
     ports:
       - "8000:8000"
-    depends_on:
-      redis:
-        condition: service_started
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 2gb
+    networks:
+      - bot
+
+  tokenparser:
+    container_name: bot-token
+    image: ${TOKENPARSER_IMAGE}
     networks:
       - bot
 
