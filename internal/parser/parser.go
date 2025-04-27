@@ -2,8 +2,6 @@ package parser
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"github.com/bytedance/sonic"
 	"github.com/rs/zerolog/log"
 	"io"
@@ -49,6 +47,7 @@ func NewParserService(host string) Parser {
 		host: host,
 		client: &http.Client{
 			Transport: &retry{
+				next:    http.DefaultTransport,
 				retries: defaultRetryCount,
 				delay:   defaultRetryDelay,
 			},
@@ -72,32 +71,11 @@ func (p *parser) makeRequest(method, uri string, v any) (*http.Response, error) 
 
 	resp, err := p.client.Do(r)
 	if err != nil {
-		if errors.Is(err, errRetriesExceeded) {
-			return nil, ErrParserUnavailable
-		}
+		// логируем все ошибки, даже типовые
 		log.Err(err).Str("method", method).Str("uri", uri).Msg("parser/makeRequest error make http request")
 		return nil, err
 	}
-	if resp.StatusCode > 400 {
-		return nil, handleParserErr(resp)
-	}
 	return resp, nil
-}
-
-func handleParserErr(r *http.Response) error {
-	switch r.StatusCode {
-	case http.StatusForbidden:
-		return ErrIncorrectLoginPassword
-
-	case http.StatusInternalServerError:
-		return ErrParserUnavailable
-
-	case http.StatusServiceUnavailable:
-		return ErrModeusUnavailable
-
-	default:
-		return fmt.Errorf("unexpected status code: %d", r.StatusCode)
-	}
 }
 
 func parseBody(r *http.Response, v any) error {
@@ -118,26 +96,38 @@ func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
-var errRetriesExceeded = errors.New("max retries exceeded")
-
 type retry struct {
+	next    http.RoundTripper
 	retries int
 	delay   time.Duration
 }
 
 func (rt *retry) RoundTrip(r *http.Request) (resp *http.Response, err error) {
 	for i := 0; i < rt.retries; i++ {
-		resp, err = http.DefaultTransport.RoundTrip(r)
+		resp, err = rt.next.RoundTrip(r)
 		if err != nil {
 			return nil, err
 		}
 
-		if resp.StatusCode != http.StatusInternalServerError {
+		switch resp.StatusCode {
+		case http.StatusOK, http.StatusBadRequest:
 			return
-		}
-		_ = resp.Body.Close()
 
-		time.Sleep(rt.delay)
+		case http.StatusForbidden:
+			return nil, ErrIncorrectLoginPassword
+
+		case http.StatusServiceUnavailable:
+			return nil, ErrModeusUnavailable
+
+		}
+		_ = r.Body.Close()
+
+		select {
+		case <-r.Context().Done():
+			return nil, r.Context().Err()
+
+		case <-time.After(rt.delay):
+		}
 	}
-	return nil, errRetriesExceeded
+	return nil, ErrParserUnavailable
 }
